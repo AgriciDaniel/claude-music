@@ -1,141 +1,156 @@
 # claude-music
 
-AI-powered music production skill for [Claude Code](https://claude.ai/code), powered by [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5).
+AI music production skill for [Claude Code](https://claude.ai/code), powered by [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5).
 
-Generate full songs, covers, remixes, and more — directly from your terminal.
+Generate full songs, covers, remixes, and more — just by describing what you want.
 
-## Features
+## Quick Start (5 minutes)
 
-- **Text-to-Music** — Generate songs from captions and lyrics (50+ languages)
-- **Cover/Style Transfer** — Transform existing songs into new genres
-- **Section Editing (Repaint)** — Fix a chorus, change instruments in a section
-- **Track Extraction** — Separate vocals, drums, bass (base model)
-- **Multi-Track Layering (Lego)** — Add instrument layers (base model)
-- **Audio Completion** — Extend and continue existing audio (base model)
-- **Songwriting Assistant** — Caption crafting, lyrics formatting, BPM/key selection
-- **Audio Analysis** — BPM detection, key estimation, loudness measurement
-- **Platform Export** — Spotify, YouTube, TikTok, podcast, CD-ready formats
-- **LoRA Training** — Fine-tune on 3-10 songs for custom styles
+**You only need to run ONE command.** The installer handles everything else.
+
+### Step 1: Download this skill
+
+Open a terminal and paste:
+
+```bash
+git clone https://github.com/AgriciDaniel/claude-music.git
+cd claude-music
+```
+
+### Step 2: Run the installer
+
+```bash
+bash install.sh
+```
+
+The installer will:
+- Check your system (GPU, Python, FFmpeg)
+- Install ACE-Step 1.5 if you don't have it (asks first)
+- Download the AI models (~5GB, asks first)
+- Configure everything automatically
+- Link the skill to Claude Code
+
+**That's it.** No config files to edit. No terminal commands to memorize.
+
+### Step 3: Make music
+
+Open Claude Code (CLI, Desktop app, or VS Code) and say:
+
+> "Generate a chill lo-fi beat, 60 seconds"
+
+Or:
+
+> "Make me a pop song about summer with female vocals"
+
+Or use the command directly:
+
+```
+/music generate --caption "upbeat pop, female vocal, catchy" --duration 60
+```
+
+## What You Can Do
+
+| Say this... | What happens |
+|-------------|-------------|
+| "Make me a song about..." | Generates a full song with vocals |
+| "Create an instrumental jazz piece" | Instrumental generation |
+| "Make a rock cover of this song" | Style transfer from reference audio |
+| "Fix the chorus, make it more energetic" | Edits just that section |
+| "Export for Spotify" | Loudness-optimized, platform-ready file |
+| "Surprise me with something random" | Random genre, instant generation |
 
 ## Requirements
 
-- [Claude Code](https://claude.ai/code) (CLI, Desktop, or VS Code extension)
-- [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) installed locally
-- [uv](https://docs.astral.sh/uv/) (Python package manager)
-- NVIDIA GPU with 4GB+ VRAM (8GB+ recommended, 16GB+ for XL models)
-- FFmpeg (for audio export and analysis)
+- **Claude Code** — [Get it here](https://claude.ai/code) (CLI, Desktop, or VS Code extension)
+- **NVIDIA GPU** — 4GB+ VRAM minimum, 8GB+ recommended
+  - No GPU? It works on CPU too, just much slower
+- **Storage** — ~10GB free (for ACE-Step + AI models)
 
-## Installation
+The installer handles everything else (Python, FFmpeg, uv, ACE-Step).
 
-```bash
-# 1. Clone this repo
-git clone https://github.com/AgriciDaniel/claude-music.git
-cd claude-music
+## Features
 
-# 2. Install ACE-Step 1.5 (if not already installed)
-git clone https://github.com/ace-step/ACE-Step-1.5.git ~/Desktop/Local-AI-Models/ACE-Step-1.5
-cd ~/Desktop/Local-AI-Models/ACE-Step-1.5
-uv sync
-uv run acestep-download  # Download model checkpoints
-
-# 3. Install the Claude Code skill
-cd /path/to/claude-music
-bash install.sh
-
-# 4. Verify installation
-bash ~/.claude/skills/claude-music/scripts/setup.sh
-```
-
-## Configuration
-
-Edit `skills/claude-music/config.json` to set your ACE-Step path:
-
-```json
-{
-  "ace_step_dir": "/path/to/your/ACE-Step-1.5",
-  "output_dir": "~/Music/claude-music-output"
-}
-```
-
-## Usage
-
-In Claude Code, use `/music` or natural language:
-
-```
-/music generate --caption "upbeat pop, female vocal" --duration 60
-/music cover --src-audio song.mp3 --caption "jazz version"
-/music repaint --src-audio song.mp3 --start 30 --end 60
-/music compose    # Songwriting assistance
-/music analyze    # BPM, key, loudness
-/music export     # Platform-optimized export
-/music random     # Quick random generation
-```
+- **10 Sub-Skills**: generate, cover, repaint, compose, export, analyze, enhance, random, library, lora
+- **50+ Languages**: English, Spanish, Chinese, Japanese, Korean, and more
+- **Quality Presets**: draft (~15s) to max (~5min) — pick your speed/quality tradeoff
+- **Platform Export**: Spotify, YouTube, TikTok, podcast, CD — one command each
+- **LoRA Training**: Fine-tune on 3-10 songs for your own custom style
+- **30+ Genre Recipes**: Built-in knowledge of optimal settings per genre
+- **Safety**: No overwrites, VRAM management, disk space checks
 
 ## Quality Presets
 
-| Preset | Speed | Use for |
-|--------|-------|---------|
-| `--quality draft` | ~15s | Quick exploration (4 variants) |
-| `--quality standard` | ~15s | Default (2 variants) |
-| `--quality high` | ~25s | Better lyrics/structure (LM thinking) |
-| `--quality max` | ~3-5min | Highest quality (base model, 65 steps) |
+| Preset | Speed | Best for |
+|--------|-------|----------|
+| `--quality draft` | ~15s | Quick ideas, exploring (4 variants) |
+| `--quality standard` | ~15s | Default, everyday use (2 variants) |
+| `--quality high` | ~25s | Better lyrics/structure |
+| `--quality max` | ~3-5min | Highest quality possible |
 
-## Architecture
+## Commands Reference
 
 ```
-claude-music/
-├── install.sh                         # Symlinks skills to ~/.claude/skills/
-├── uninstall.sh                       # Removes symlinks
-├── skills/
-│   ├── claude-music/                  # Main orchestrator
-│   │   ├── SKILL.md                   # Routing, safety rules, VRAM management
-│   │   ├── config.json                # ACE-Step paths + defaults
-│   │   ├── scripts/
-│   │   │   ├── music_engine.py        # Core Python engine (6 task types)
-│   │   │   ├── music_engine.sh        # Bash wrapper (env + uv run)
-│   │   │   ├── music_export.sh        # Platform FFmpeg exports
-│   │   │   ├── detect_gpu.sh          # GPU detection -> JSON
-│   │   │   ├── preflight.sh           # Safety checks -> JSON
-│   │   │   ├── check_deps.sh          # Dependency verification -> JSON
-│   │   │   └── setup.sh               # Installation verification
-│   │   └── references/                # 7 on-demand knowledge docs
-│   ├── claude-music-generate/         # Text-to-music sub-skill
-│   ├── claude-music-cover/            # Cover/style transfer sub-skill
-│   ├── claude-music-repaint/          # Section editing sub-skill
-│   ├── claude-music-compose/          # Songwriting assistant
-│   ├── claude-music-export/           # Platform export sub-skill
-│   ├── claude-music-analyze/          # Audio analysis sub-skill
-│   ├── claude-music-enhance/          # Post-processing sub-skill
-│   ├── claude-music-random/           # Quick random generation
-│   ├── claude-music-library/          # Output management
-│   └── claude-music-lora/             # LoRA training sub-skill
+/music generate   — Create music from text + lyrics
+/music cover      — Remake a song in a different style
+/music repaint    — Edit a section of a song
+/music compose    — Songwriting help (lyrics, caption, BPM)
+/music export     — Export for Spotify/YouTube/TikTok/etc
+/music analyze    — Check BPM, key, loudness
+/music enhance    — Normalize, denoise, separate stems
+/music random     — Random generation (surprise me!)
+/music library    — Browse your generated music
+/music lora       — Train custom styles
+/music setup      — Check if everything works
 ```
 
 ## How It Works
 
-The skill wraps ACE-Step 1.5's Python API directly — no server required. Each command:
+1. You describe what you want (or use `/music generate`)
+2. Claude crafts the right caption, lyrics, and parameters
+3. ACE-Step 1.5 generates the audio locally on your GPU
+4. You listen, iterate, and export
 
-1. Loads the DiT model (turbo: ~15s cold start, base: ~20s)
-2. Optionally loads the 5Hz LM for thinking mode
-3. Generates audio via the diffusion pipeline
-4. Outputs JSON with file paths, seeds, and timing
-5. Files saved to `~/Music/claude-music-output/`
+No cloud API. No subscription. Everything runs on your machine.
 
 ## GPU Requirements
 
-| Configuration | VRAM | Notes |
-|---------------|------|-------|
-| Turbo (default) | ~8GB | Fast, good quality |
-| Turbo + 1.7B LM | ~14GB | Better lyrics adherence |
-| XL Turbo | ~14-16GB | Maximum quality DiT |
+| Setup | VRAM | Speed |
+|-------|------|-------|
+| Turbo (default) | ~8GB | ~15 seconds |
+| Turbo + Thinking | ~14GB | ~25 seconds |
+| XL (best quality) | ~16GB | ~30 seconds |
 
 ## Uninstall
 
 ```bash
+cd claude-music
 bash uninstall.sh
 ```
 
-This removes symlinks only. Your repo, generated music, and ACE-Step installation are untouched.
+Removes skill links only. Your generated music and ACE-Step are untouched.
+
+## Architecture
+
+<details>
+<summary>Click to expand (for developers)</summary>
+
+```
+claude-music/
+├── install.sh              # Interactive installer (handles everything)
+├── uninstall.sh            # Clean removal
+├── skills/
+│   ├── claude-music/       # Main orchestrator
+│   │   ├── SKILL.md        # Routing, safety, VRAM management
+│   │   ├── config.json     # Auto-configured by installer
+│   │   ├── scripts/        # 7 executable scripts
+│   │   └── references/     # 7 on-demand knowledge docs
+│   └── claude-music-*/     # 10 sub-skill directories
+```
+
+The skill wraps ACE-Step 1.5's Python API directly — no server needed.
+Scripts output JSON for Claude to parse. Symlinks connect the repo to `~/.claude/skills/`.
+
+</details>
 
 ## License
 
