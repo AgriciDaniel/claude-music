@@ -13,6 +13,44 @@ allowed-tools:
 
 # claude-music-cover — Cover/Style Transfer
 
+## Worked example (input → command → output)
+
+**User**: "Turn this pop song into a jazz cover" (hands over `~/Music/my_song.flac`)
+
+**Command**:
+```bash
+bash ~/.claude/skills/claude-music/scripts/music_engine.sh \
+  --quality standard \
+  cover \
+  --src-audio "$HOME/Music/my_song.flac" \
+  --caption "smooth jazz, saxophone, piano trio, warm, live recording feel" \
+  --cover-strength 0.5
+```
+
+**Expected JSON on stdout**:
+```json
+{
+  "success": true,
+  "task_type": "cover",
+  "model": "acestep-v15-turbo",
+  "outputs": [
+    {"path": "/home/$USER/Music/claude-music-output/cover_20260416_121040_01.flac",
+     "seed": 4921, "size_mb": 2.47, "index": 1},
+    {"path": "/home/$USER/Music/claude-music-output/cover_20260416_121040_02.flac",
+     "seed": 81244, "size_mb": 2.52, "index": 2}
+  ],
+  "params": {
+    "src_audio": "/home/$USER/Music/my_song.flac",
+    "cover_strength": 0.5,
+    "caption": "smooth jazz, saxophone, piano trio, warm, live recording feel"
+  },
+  "timing": {"generation_sec": 29.4},
+  "count": 2
+}
+```
+
+Note: `--cover-strength` maps to ACE-Step's `cover_noise_strength` (0.0 = fully reimagine source, 1.0 = stay close to source). The code passes `src_audio` + `cover_noise_strength` — the older `reference_audio`/`audio_cover_strength` field names are wrong and guarded by a regression test.
+
 ## Pre-Flight
 
 1. Verify source audio exists: `bash ~/.claude/skills/claude-music/scripts/preflight.sh "$SRC_AUDIO" "$OUTPUT"`

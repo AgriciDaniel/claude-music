@@ -741,7 +741,9 @@ def build_parser():
     )
 
     # Global options
-    # Read default from config.json if available
+    # Read default from config.json if available. Do NOT exit on a missing/
+    # unconfigured path here — --help must always work. Validation happens in
+    # main() once a subcommand is selected.
     default_ace_dir = None
     config_path = Path(__file__).parent.parent / "config.json"
     if config_path.exists():
@@ -754,12 +756,6 @@ def build_parser():
                 default_ace_dir = val
         except Exception:
             pass
-
-    if not default_ace_dir:
-        error_json(
-            "ACE-Step path not configured",
-            "Edit config.json and set ace_step_dir to your ACE-Step 1.5 installation path"
-        )
 
     parser.add_argument("--ace-step-dir", default=default_ace_dir,
                         help="ACE-Step installation directory")
@@ -889,6 +885,15 @@ def main():
     if not args.command:
         parser.print_help(sys.stderr)
         error_json("No command specified", "Use: music_engine.py generate|cover|repaint|extract|lego|complete")
+
+    # Validate ACE-Step path only when actually running a subcommand.
+    # --help / --version and missing-subcommand cases are already handled above.
+    if not args.ace_step_dir:
+        error_json(
+            "ACE-Step path not configured",
+            "Run install.sh, or edit skills/claude-music/config.json and set "
+            "ace_step_dir to your ACE-Step 1.5 installation path"
+        )
 
     try:
         args.func(args)

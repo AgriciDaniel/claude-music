@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Validate JSON (plugin manifests + config)
+        run: |
+          set -e
+          python -m json.tool .claude-plugin/plugin.json > /dev/null
+          python -m json.tool .claude-plugin/marketplace.json > /dev/null
+          python -m json.tool skills/claude-music/config.json > /dev/null
+          echo "All JSON files valid."
+
+      - name: Python compile check (no import side effects)
+        run: |
+          find skills -name "*.py" -print0 | xargs -0 -n1 python -m py_compile
+          find tests -name "*.py" -print0 | xargs -0 -n1 python -m py_compile
+
+      - name: Shell syntax check (bash -n)
+        run: |
+          set -e
+          for sh in install.sh uninstall.sh skills/claude-music/scripts/*.sh; do
+            [ -f "$sh" ] && bash -n "$sh" && echo "OK: $sh"
+          done
+
+      - name: ShellCheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: "./skills/claude-music/scripts"
+          additional_files: "install.sh uninstall.sh"
+          severity: warning
+
+      - name: Ruff lint
+        run: ruff check skills/ tests/
+
+      - name: Pytest (unit — no GPU)
+        run: pytest tests/ -v
+
+  validate-skill-frontmatter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate SKILL.md frontmatter
+        run: |
+          python - <<'PY'
+          import re, sys
+          from pathlib import Path
+
+          fail = False
+          for skill_md in Path("skills").rglob("SKILL.md"):
+              text = skill_md.read_text()
+              m = re.match(r"^---\n(.*?)\n---\n", text, re.DOTALL)
+              if not m:
+                  print(f"FAIL  {skill_md}: no YAML frontmatter")
+                  fail = True
+                  continue
+              fm = m.group(1)
+              for field in ("name:", "description:"):
+                  if field not in fm:
+                      print(f"FAIL  {skill_md}: missing {field}")
+                      fail = True
+              # Verify name matches parent directory
+              name_match = re.search(r"^name:\s*(\S+)", fm, re.MULTILINE)
+              if name_match and name_match.group(1) != skill_md.parent.name:
+                  print(f"FAIL  {skill_md}: name={name_match.group(1)!r} != dir={skill_md.parent.name!r}")
+                  fail = True
+              else:
+                  print(f"OK    {skill_md}")
+          sys.exit(1 if fail else 0)
+          PY

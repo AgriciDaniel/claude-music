@@ -64,3 +64,16 @@ ffmpeg -i input.flac \
 3. **Remix**: Combine processed stems back with FFmpeg amerge/amix
 4. **Normalize**: Two-pass loudnorm to target platform LUFS
 5. **Export**: Convert to target format with metadata
+
+## Scripts used here
+
+- `scripts/music_export.sh` — implements the FFmpeg loudnorm + format conversion commands above. Supports targets: spotify, apple, youtube, tiktok, podcast, cd, radio, mono-podcast.
+- `scripts/music_engine.sh extract` — stem separation via ACE-Step's `extract` task_type (alternative to Demucs).
+
+## Sources
+
+- **Platform loudness targets**: Spotify (artists.spotify.com/help/article/loudness-normalization), Apple Sound Check specification, YouTube Loudness Normalization documentation, AES TD1006 broadcast spec for radio.
+- **FFmpeg loudnorm filter**: `ffmpeg -h filter=loudnorm` + EBU R128 reference (tech.ebu.ch/docs/r/r128.pdf).
+- **AI enhancement path**: cross-skill integration with `~/.claude/skills/claude-video/scripts/audio_enhance.py` (sibling skill); Demucs (github.com/facebookresearch/demucs) for stem separation; DeepFilterNet3 (github.com/Rikorose/DeepFilterNet) for vocal denoising.
+
+**Gap (Theme 6 of research plan)**: LANDR/Ozone-style AI mastering integration pending user access; `references/mastering.md` will ship a ≥4-preset library once Theme 6 completes.

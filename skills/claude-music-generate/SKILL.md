@@ -14,6 +14,39 @@ allowed-tools:
 
 # claude-music-generate — Text-to-Music Generation
 
+## Worked example (input → command → output)
+
+**User**: "Generate a 30-second upbeat pop instrumental I can loop"
+
+**Command**:
+```bash
+bash ~/.claude/skills/claude-music/scripts/music_engine.sh \
+  --quality standard \
+  generate \
+  --caption "upbeat pop, catchy, synth hooks, female vocal" \
+  --instrumental --duration 30 --language en
+```
+
+**Expected JSON on stdout**:
+```json
+{
+  "success": true,
+  "task_type": "text2music",
+  "model": "acestep-v15-turbo",
+  "outputs": [
+    {"path": "/home/$USER/Music/claude-music-output/text2music_20260416_120512_01.flac",
+     "seed": 137294, "size_mb": 1.83, "index": 1},
+    {"path": "/home/$USER/Music/claude-music-output/text2music_20260416_120512_02.flac",
+     "seed": 837412, "size_mb": 1.80, "index": 2}
+  ],
+  "timing": {"generation_sec": 18.3},
+  "count": 2,
+  "playback_hint": "ffplay -nodisp -autoexit \"/home/$USER/Music/claude-music-output/text2music_20260416_120512_01.flac\""
+}
+```
+
+Global flags (`--quality`, `--format`, `--seed`, etc.) go BEFORE the subcommand (`generate`). Subcommand flags (`--caption`, `--duration`, etc.) go AFTER.
+
 ## Pre-Flight
 
 1. Run `bash ~/.claude/skills/claude-music/scripts/preflight.sh "" "$OUTPUT"` if output specified

@@ -1,0 +1,15 @@
+{
+  "name": "claude-music",
+  "owner": {
+    "name": "AgriciDaniel",
+    "url": "https://github.com/AgriciDaniel"
+  },
+  "plugins": [
+    {
+      "name": "claude-music",
+      "description": "AI music production suite using ACE-Step 1.5 — generate, cover, repaint, compose, analyze, export, enhance, LoRA-train. Direct Python API, no REST server required.",
+      "version": "0.1.0",
+      "source": "./"
+    }
+  ]
+}

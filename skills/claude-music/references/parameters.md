@@ -1,5 +1,13 @@
 # ACE-Step 1.5 Full Parameter Reference
 
+## Contents
+- [GenerationParams](#generationparams) — Text Inputs, Music Metadata, Generation Control, Task Type, Audio-to-Audio, LM Control, Post-Processing
+- [GenerationConfig](#generationconfig) — batch size, format, seed behavior
+- [Quality Presets](#quality-presets-music_enginepy) — draft / standard / high / max
+- [Model Variants](#model-variants) — 2B turbo/sft/base + 4B XL equivalents
+- [LM Models](#lm-models) — 0.6B / 1.7B / 4B trade-offs
+- [Sources](#sources)
+
 ## GenerationParams
 
 ### Text Inputs
@@ -36,14 +44,15 @@
 |-----------|------|---------|---------|
 | `task_type` | str | "text2music" | text2music, cover, repaint, extract, lego, complete |
 
-### Audio-to-Audio (Cover/Repaint)
+### Audio-to-Audio (Cover/Repaint/Extract/Lego/Complete)
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `reference_audio` | str | None | Reference audio for cover mode |
-| `src_audio` | str | None | Source audio for repaint/extract/lego/complete |
-| `audio_cover_strength` | float | 1.0 | 0.0 (reimagine) to 1.0 (faithful) |
+| `src_audio` | str | None | Source audio path — used by ALL audio-to-audio modes (cover, repaint, extract, lego, complete) |
+| `cover_noise_strength` | float | 0.5 | Cover mode: noise to apply to source. 0.0 = faithful to source, 1.0 = fully reimagined. Used by `cover` task_type only. |
 | `repainting_start` | float | 0.0 | Repaint region start (seconds) |
 | `repainting_end` | float | -1.0 | Repaint region end (-1 = end of file) |
+
+**Cover-mode note**: the ACE-Step demo `examples/generate_saxobeat_cover_spanish.py` uses `src_audio=SOURCE_AUDIO` and `cover_noise_strength=0.5`. Earlier versions of this doc and of `music_engine.py` used `reference_audio` and `audio_cover_strength` — those names are stale/deprecated. Tests in `tests/test_music_engine.py` guard against regression.
 
 ### LM (5Hz Language Model) Control
 | Parameter | Type | Default | Description |
@@ -100,3 +109,28 @@
 | acestep-5Hz-lm-0.6B | 0.6B | ~3GB | Fast | Basic planning |
 | acestep-5Hz-lm-1.7B | 1.7B | ~8GB | Medium | Good metadata + caption |
 | acestep-5Hz-lm-4B | 4B | ~12GB | Slow | Best reasoning |
+
+## Scripts used here
+
+- `scripts/music_engine.py` — the Python engine that consumes every field in
+  this reference. `QUALITY_PRESETS` dict (top of file) implements the preset
+  table above. Subcommands `generate`, `cover`, `repaint`, `extract`, `lego`,
+  `complete` each build a `GenerationParams` with the fields relevant to that
+  task type.
+- `scripts/music_engine.sh` — bash wrapper that resolves `config.json`,
+  checks VRAM, then invokes `uv run python3 music_engine.py` from the
+  ACE-Step directory.
+- `scripts/rank.py` *(stub)* — will batch-rank outputs against caption; see
+  `references/ranking-method.md`.
+
+## Sources
+
+Parameter values and defaults are grounded in:
+- **Primary**: ACE-Step 1.5 source `acestep/schema.py` (`GenerationParams`, `GenerationConfig` dataclasses) — the authoritative type definitions.
+- **Primary**: Musician's Guide (`<ace_step_dir>/docs/en/ace_step_musicians_guide.md`) — default values and semantic ranges.
+- **Primary**: Tutorial (`<ace_step_dir>/docs/en/Tutorial.md`) — inference-step and guidance-scale guidance per model variant.
+- **Cover-mode mapping**: `<ace_step_dir>/examples/generate_saxobeat_cover_spanish.py` — verified field names `src_audio` + `cover_noise_strength`.
+- **Quality presets** (`draft`/`standard`/`high`/`max`): designed in this skill — see `scripts/music_engine.py:QUALITY_PRESETS`. Values chosen from Tutorial.md §Turbo vs Base.
+- **Model VRAM estimates**: cross-referenced `<ace_step_dir>/README.md` hardware table + local measurement on RTX 5070 Ti 16GB (research report: `research/drafts/ace-step-research-report-2026-04-15.md` §Domain 5).
+
+**Known gaps (to be filled in Theme 2 of research plan)**: the `shift`, `infer_method`, `sampler_mode`, and `use_adg` optimal settings per genre are currently defaults; Theme 2 will A/B-test and replace with preset-table-backed values.

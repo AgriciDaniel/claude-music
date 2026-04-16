@@ -1,0 +1,56 @@
+[project]
+name = "claude-music"
+version = "0.1.0"
+description = "AI music production skill for Claude Code, powered by ACE-Step 1.5"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Daniel Agrici" }]
+requires-python = ">=3.10"
+keywords = ["music", "ace-step", "claude-code", "ai-music"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Sound/Audio",
+]
+
+# Runtime deps are managed by ACE-Step itself (loaded via `uv run` from its dir).
+# The skill scripts have no pip-installable runtime deps beyond Python stdlib.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "pytest-mock>=3.12",
+  "ruff>=0.4",
+  "shellcheck-py>=0.10",
+]
+# Deferred to Theme 3 (Session 3+); documented here as the contract.
+ranking = [
+  "librosa>=0.10",
+  "laion-clap",
+  "soundfile",
+]
+
+[project.urls]
+Homepage = "https://github.com/AgriciDaniel/claude-music"
+Repository = "https://github.com/AgriciDaniel/claude-music"
+Issues = "https://github.com/AgriciDaniel/claude-music/issues"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = ["research/scratch", "research/drafts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
+ignore = [
+  "E501",  # line too long (ruff formatter handles)
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["skills/claude-music/scripts"]
+addopts = "-v --tb=short"

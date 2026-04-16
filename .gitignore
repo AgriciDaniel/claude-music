@@ -3,3 +3,16 @@ __pycache__/
 .env
 *.backup.*
 .claude/
+
+# Research working dir (47 MB of cloned competitor repos — not distributed)
+research/scratch/
+
+# Test/tooling artifacts
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/

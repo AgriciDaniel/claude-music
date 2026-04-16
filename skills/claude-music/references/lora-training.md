@@ -1,5 +1,16 @@
 # LoRA/LoKr Training Guide for ACE-Step 1.5
 
+## Contents
+- [Overview](#overview)
+- [Dataset Preparation](#dataset-preparation) — requirements, layout, tips per goal type
+- [LoRA vs LoKr](#lora-vs-lokr) — trade-off matrix
+- [Training Commands](#training-commands) — full CLI for each method
+- [Hyperparameter Guide](#hyperparameter-guide)
+- [Training Time Estimates](#training-time-estimates) — per GPU
+- [Evaluation](#evaluation)
+- [Important Notes](#important-notes)
+- [Sources](#sources)
+
 ## Overview
 
 Train custom LoRA adapters to capture specific vocal styles, genres, instruments, or production aesthetics from a small dataset of 3-10 reference songs.
@@ -107,3 +118,12 @@ uv run python3 -m acestep.training.train_lora \
 - Train on the **same model variant** you'll use for generation
 - The LoRA output directory must be accessible at generation time
 - See official docs: `<ace_step_dir>/docs/en/LoRA_Training_Tutorial.md`
+
+## Sources
+
+- **Primary**: `<ace_step_dir>/docs/en/LoRA_Training_Tutorial.md` — command-line contract for `acestep.training.train_lora` module, LoRA vs LoKr selection guidance.
+- **Primary**: `<ace_step_dir>/acestep/training/train_lora.py` — authoritative for `--method`, `--rank`, `--learning-rate` defaults.
+- **GPU time estimates**: measured locally on RTX 5070 Ti 16GB + ACE-Step team benchmarks in the tutorial.
+- **Research report** §Domain 7 LoRA/LoKr trade-offs: `research/drafts/ace-step-research-report-2026-04-15.md`.
+
+**Gap (research plan Theme 7)**: the LoRA-vs-LoKr recommendation matrix is community-contested; some practitioners on r/AI_music_generation report LoKr outperforms LoRA on small-dataset genre adaptation. Theme 7 will resolve this via controlled training experiments (currently deferred — train-test is high GPU cost). Flagged G10 in gap register.

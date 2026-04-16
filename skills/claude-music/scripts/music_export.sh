@@ -21,6 +21,14 @@ fi
 BASENAME=$(basename "$INPUT" | sed 's/\.[^.]*$//' | tr -cd 'a-zA-Z0-9._-')
 DIR=$(dirname "$INPUT")
 
+# Platform loudness targets:
+#   -14 LUFS / -1 dBTP  → Spotify / Apple Music / YouTube / TikTok / Instagram
+#                         (EBU R128 per artists.spotify.com/help/article/loudness-normalization)
+#   -16 LUFS / -1 dBTP  → Podcast (AES TD1004, generally quieter dialogue-safe)
+#   LRA=11              → loudness-range target; wide enough for dynamic music,
+#                         tight enough to prevent deep attenuation on chart streamers.
+# Full references live in skills/claude-music/references/post-processing.md
+
 # Safety: don't overwrite existing files
 check_output() {
     if [ -f "$1" ]; then

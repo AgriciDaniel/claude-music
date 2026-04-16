@@ -19,8 +19,14 @@ cd claude-music
 
 ### Step 2: Run the installer
 
+**Linux / macOS**:
 ```bash
 bash install.sh
+```
+
+**Windows** (PowerShell, Developer Mode or Admin):
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
 The installer will:
@@ -136,27 +142,68 @@ Removes skill links only. Your generated music and ACE-Step are untouched.
 
 ```
 claude-music/
-├── install.sh              # Interactive installer (handles everything)
+├── .claude-plugin/         # Plugin manifest (Dec 2025 open standard)
+│   ├── plugin.json
+│   └── marketplace.json
+├── .github/workflows/      # CI — ruff, shellcheck, pytest, JSON validation
+├── install.sh              # Interactive installer (Linux / macOS)
+├── install.ps1             # PowerShell installer (Windows)
 ├── uninstall.sh            # Clean removal
-├── skills/
-│   ├── claude-music/       # Main orchestrator
-│   │   ├── SKILL.md        # Routing, safety, VRAM management
-│   │   ├── config.json     # Auto-configured by installer
-│   │   ├── scripts/        # 7 executable scripts
-│   │   └── references/     # 7 on-demand knowledge docs
-│   └── claude-music-*/     # 10 sub-skill directories
+├── pyproject.toml          # Python project metadata (dev + ranking deps)
+├── ARCHITECTURE.md         # Why Python API over REST, orchestrator layout
+├── LICENSE                 # MIT
+├── CONTRIBUTING.md         # How to add genre recipes, run tests, PR checklist
+├── SECURITY.md             # Threat model + vuln reporting
+├── CODE_OF_CONDUCT.md      # Contributor Covenant v2.1
+├── CITATION.cff            # Machine-readable citation
+├── tests/                  # GPU-free contract tests (pytest)
+│   └── test_music_engine.py  # 13 tests: presets, JSON contract, cover-mode mapping, security guards
+├── research/               # Plan-driven research deliverables
+│   ├── theme-9-anthropic-rubric.md
+│   ├── theme-10-refactor-plan.md
+│   └── theme-10-architecture-diff.md
+└── skills/
+    ├── claude-music/            # Main orchestrator
+    │   ├── SKILL.md
+    │   ├── config.json          # Auto-configured by installer
+    │   ├── scripts/             # 8 scripts: music_engine.{py,sh}, music_export.sh, rank.py (stub), detect_gpu.sh, preflight.sh, check_deps.sh, setup.sh
+    │   ├── references/          # 8 on-demand docs (prompt, genres, params, theory, structures, post-proc, LoRA, ranking-method)
+    │   └── agents/              # 1 subagent: music-composer (opus, forked-context)
+    └── claude-music-*/          # 10 sub-skill directories
 ```
 
-The skill wraps ACE-Step 1.5's Python API directly — no server needed.
-Scripts output JSON for Claude to parse. Symlinks connect the repo to `~/.claude/skills/`.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the Python-API-vs-REST decision and other design choices.
 
 </details>
 
+## For contributors
+
+```bash
+pip install -e ".[dev]"
+pytest tests/            # 13 contract tests, <1s, no GPU required
+ruff check skills/ tests/
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and PR checklist, and [SECURITY.md](SECURITY.md) for the threat model + how to report vulnerabilities.
+
+## What's new in v0.2
+
+- Plugin manifest (`.claude-plugin/plugin.json` + `marketplace.json`) for the Dec 2025 Agent Skills open standard.
+- GPU-free test suite with regression guards for the cover-mode parameter fix (`src_audio` + `cover_noise_strength`).
+- CI pipeline: ruff + shellcheck + pytest + JSON validation.
+- Windows installer (`install.ps1`) matching the bash installer.
+- `ARCHITECTURE.md` documenting the Python-API-over-REST decision.
+- `rank.py` stub + `references/ranking-method.md` (infrastructure for Theme 3 batch-and-rank).
+- `agents/music-composer.md` subagent for Opus-powered composition planning in forked context.
+- Source attribution on every reference doc.
+- `--help` now works even when ACE-Step isn't configured yet (bug fixed during test scaffolding).
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE). Generated audio inherits no licensing obligations from this skill; consult ACE-Step's license.
 
 ## Credits
 
-- [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) by ACE Studio / Timedomain + StepFun
-- Built for [Claude Code](https://claude.ai/code) by Anthropic
+- [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) by ACE Studio / Timedomain + StepFun.
+- Built for [Claude Code](https://claude.ai/code) by Anthropic.
+- Architectural patterns lifted from the [anthropics/skills](https://github.com/anthropics/skills) reference set and sibling projects [claude-seo](https://github.com/AgriciDaniel/claude-seo) and [claude-blog](https://github.com/AgriciDaniel/claude-blog).

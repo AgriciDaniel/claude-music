@@ -93,3 +93,11 @@ Total: ~30-45s
 | 120 | 16s | 32s | 64s |
 | 140 | 14s | 27s | 55s |
 | 160 | 12s | 24s | 48s |
+
+## Sources
+
+- **Structure tag vocabulary**: ACE-Step Musician's Guide (`<ace_step_dir>/docs/en/ace_step_musicians_guide.md`) — the tags `[Intro]`, `[Verse]`, `[Pre-Chorus]`, `[Chorus]`, `[Bridge]`, `[Drop]`, `[Build]`, `[Hook]`, `[Guitar Solo]`, `[Piano Interlude]`, `[Fade Out]` are verbatim from its structure-tag section.
+- **Section length conventions**: generalized Western popular-music practice (Jason Blume, *Six Steps to Songwriting Success*; Pat Pattison, *Writing Better Lyrics*). These are starting points — ACE-Step respects the tags loosely, not strictly.
+- **Timing calculator formula**: standard `seconds = (bars × 4) / (BPM / 60)` for 4/4 time.
+
+**Observed behavior**: ACE-Step's 5Hz LM is more likely to preserve section boundaries when `thinking: true` + lyrics include explicit `[Tag]` markers. Without tags, the model infers structure from caption alone — results are coherent but less predictable.

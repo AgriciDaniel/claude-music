@@ -3,8 +3,12 @@ name: claude-music-compose
 description: >
   Songwriting guide for ACE-Step music generation. Helps craft captions (style descriptions),
   lyrics with structure tags, and choose optimal BPM/key/duration/time signature.
+when_to_use: >
   Use when user says "compose", "write lyrics", "songwriting", "plan a song",
   "caption help", or needs guidance before generating music.
+model: opus
+context: fork
+agent: music-composer
 allowed-tools:
   - Read
 ---
@@ -12,6 +16,12 @@ allowed-tools:
 # claude-music-compose — Songwriting Assistant
 
 This is a READ-ONLY reference skill. Claude uses this knowledge to help craft optimal inputs for `/music generate`.
+
+## Execution
+
+This sub-skill runs in a forked context (`context: fork`) and delegates the actual composition planning to the **music-composer** agent (`skills/claude-music/agents/music-composer.md`). The agent returns structured JSON ready to hand to `music_engine.sh generate`.
+
+The reference material below is what the agent reads when it plans. It is also what you read when the user wants to learn the conventions rather than auto-compose.
 
 ## Output Format
 

@@ -76,3 +76,12 @@ Caption: "EDM, progressive house, energetic synths, heavy bass drop, festival, e
 BPM: 128, Key: A minor, Duration: 180s
 Quality: standard, Batch: 2
 ```
+
+## Sources
+
+- **Primary**: Musician's Guide (`<ace_step_dir>/docs/en/ace_step_musicians_guide.md`) — BPM-by-genre anchor values and caption descriptor lists.
+- **Primary**: Tutorial (`<ace_step_dir>/docs/en/Tutorial.md`) — genre exemplars and model-variant recommendations (turbo vs base per genre complexity).
+- **Quality-preset mapping**: designed in this skill based on `Tutorial.md` "complex-texture needs more steps" rule + VRAM headroom on RTX 5070 Ti 16GB.
+- **Research report** §Domain 1 (`research/drafts/ace-step-research-report-2026-04-15.md`) — 10 genre recipes with 2-3 community-validated caption variants each.
+
+**Gap (Theme 1 deliverable)**: full per-genre A/B-validated templates (≥3 sources each per research plan line 45) will replace this table with `references/prompt-templates/<genre>.md` files. Current values are docs-derived defaults — treat as v1 until Theme 1 lands.

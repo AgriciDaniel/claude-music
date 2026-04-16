@@ -1,5 +1,11 @@
 # ACE-Step Prompt Engineering Guide
 
+## Contents
+- [Caption Crafting](#caption-crafting) — formula, dimension reference, principles, examples
+- [Lyrics Formatting](#lyrics-formatting) — structure tags, density, best practices, artifact prevention
+- [Vocal Control Tags](#vocal-control-tags-in-caption)
+- [Sources](#sources)
+
 ## Caption Crafting
 
 ### Formula
@@ -109,3 +115,12 @@
 | `operatic vocal` | Classical technique |
 | `rap vocal` | Spoken/rhythmic delivery |
 | `autotune vocal` | Pitch-corrected, T-Pain style |
+
+## Sources
+
+- **Primary**: Musician's Guide (`<ace_step_dir>/docs/en/ace_step_musicians_guide.md`) — caption formula, dimension tags, lyric density table, structure tag list.
+- **Primary**: Tutorial (`<ace_step_dir>/docs/en/Tutorial.md`) — "human-centered generation" philosophy, iteration-driven approach, `guidance_scale` range for lyric adherence.
+- **Primary**: GRADIO_GUIDE (`<ace_step_dir>/GRADIO_GUIDE.md`) — vocal control tags and lyric artifact prevention.
+- **Research report** §Domain 1: `research/drafts/ace-step-research-report-2026-04-15.md` — 10-genre caption recipes, cross-checked against community practice (GitHub Discussions #235 pinned guide + #209 cover best practices).
+
+**Gaps to fill in Theme 1 of research plan**: Reddit/r/SunoAI, r/AI_music_generation practitioner mining is not yet reflected here — current recipes are docs-derived and need A/B A-vs-B validation with CLAP scoring (Theme 3 infrastructure). Flagged G1/G2 in gap register.

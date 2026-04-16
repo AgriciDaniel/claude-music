@@ -1,15 +1,16 @@
 ---
 name: claude-music
 description: >
-  AI-powered music production suite using ACE-Step 1.5 via direct Python API.
-  Song generation, cover/style transfer, section editing (repaint), track extraction,
-  multi-track layering (lego), audio completion, songwriting assistance, audio analysis,
-  platform export, and LoRA training. Supports 50+ languages, 10-minute compositions,
-  48kHz stereo output. GPU-accelerated on RTX 5070 Ti 16GB.
-  Use when user says "music", "song", "generate music", "make a song", "create music",
-  "cover song", "remix", "repaint", "edit song", "lyrics", "compose", "songwriting",
-  "BPM", "audio export", "music analysis", "stem separation", "LoRA training",
-  "ACE-Step", or "/music".
+  Music production suite using ACE-Step 1.5 via Python API. Routes /music commands
+  for generation, cover, repaint, compose, analyze, export, enhance, random, and
+  LoRA training. 50+ languages, up to 10-minute tracks, 48kHz stereo.
+when_to_use: >
+  Use when the user says /music, asks to generate a song, create music, make a
+  track, cover/remix/repaint/edit audio, write lyrics, compose, analyze BPM/key,
+  export for Spotify/TikTok, master audio, train a LoRA, or mentions ACE-Step.
+compatibility: >
+  Requires ACE-Step 1.5 installed locally + NVIDIA GPU with ≥4 GB VRAM
+  (≥12 GB recommended). Path configured in skills/claude-music/config.json.
 allowed-tools:
   - Bash
   - Read

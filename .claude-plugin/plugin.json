@@ -1,0 +1,30 @@
+{
+  "name": "claude-music",
+  "description": "AI music production suite using ACE-Step 1.5 via direct Python API. Song generation, cover/style transfer, section editing (repaint), track extraction, multi-track layering, audio completion, songwriting, analysis, platform export, enhancement, and LoRA training. 50+ languages, 10-minute compositions, 48kHz stereo.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Daniel Agrici",
+    "url": "https://github.com/AgriciDaniel"
+  },
+  "repository": "https://github.com/AgriciDaniel/claude-music",
+  "homepage": "https://github.com/AgriciDaniel/claude-music#readme",
+  "license": "MIT",
+  "skills": "./skills/",
+  "keywords": [
+    "music",
+    "ace-step",
+    "music-generation",
+    "ai-music",
+    "text-to-music",
+    "cover",
+    "repaint",
+    "lora",
+    "claude-code",
+    "audio",
+    "songwriting",
+    "lyrics",
+    "mastering",
+    "stem-separation",
+    "music-production"
+  ]
+}

@@ -38,6 +38,33 @@ fi
 export TOKENIZERS_PARALLELISM=false
 export TORCHAUDIO_USE_BACKEND=ffmpeg
 
-# Run via uv from ACE-Step directory (ensures correct Python + deps)
+# Show-once GitHub star nudge — stored outside the skill dir so it doesn't
+# pollute the repo. Pattern lifted from ace-step-skills/acestep.sh with the
+# marker file moved out of the skill directory (that was the anti-pattern).
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/claude-music"
+STAR_MARKER="$STATE_DIR/.first_gen_done"
+show_star_prompt() {
+    if [ ! -f "$STAR_MARKER" ]; then
+        mkdir -p "$STATE_DIR"
+        touch "$STAR_MARKER"
+        # Always write to stderr so the JSON stdout contract is preserved.
+        printf '\n\033[0;36m★ Liked claude-music? A GitHub star helps others find it:\033[0m\n' >&2
+        printf '  https://github.com/AgriciDaniel/claude-music\n\n' >&2
+    fi
+}
+
+# Run via uv from ACE-Step directory, capture JSON so we can inspect success
+# (replacing `exec` — the tail hook below needs to run after).
 cd "$ACE_STEP_DIR"
-exec uv run python3 "$SCRIPT" --ace-step-dir "$ACE_STEP_DIR" "$@"
+if OUT=$(uv run python3 "$SCRIPT" --ace-step-dir "$ACE_STEP_DIR" "$@"); then
+    printf '%s\n' "$OUT"
+    # Success branch: parse `"success": true` and nudge the star once.
+    if printf '%s' "$OUT" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+        show_star_prompt
+    fi
+    exit 0
+else
+    RC=$?
+    printf '%s\n' "$OUT"
+    exit "$RC"
+fi

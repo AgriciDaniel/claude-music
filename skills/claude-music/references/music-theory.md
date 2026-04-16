@@ -65,3 +65,11 @@
 | i-VII-VI-VII | Am-G-F-G | Dark, driving | Rock, Metal |
 | i-iv-v | Am-Dm-Em | Minor, dark | Metal, Electronic |
 | I-V-vi-iii-IV | C-G-Am-Em-F | Canon progression | Classical, Pop |
+
+## Sources
+
+- **Key/mood mappings**: long-established Western music theory — Schubart's 1806 treatise updated per modern practice. Cross-referenced with Alan Pollack's "Notes On..." analysis series and Hal Leonard's *The Real Book*. These are stable conventions, not ACE-Step-specific.
+- **BPM-by-genre empirical data**: compiled from (1) Spotify's public tempo statistics API ranges, (2) ACE-Step Musician's Guide genre section (`<ace_step_dir>/docs/en/ace_step_musicians_guide.md`), (3) Every Noise at Once (everynoise.com) genre tempo medians.
+- **Chord progressions**: Axis of Awesome / HookTheory public common-progression database; cross-checked with ACE-Step-generated samples for recognizability.
+
+**Scope note**: this is a human-readable reference; ACE-Step does not consume `keyscale` as a strict constraint but as a conditioning hint. Musical theory here is guidance, not a contract.
