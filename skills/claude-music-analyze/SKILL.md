@@ -1,10 +1,11 @@
 ---
 name: claude-music-analyze
 description: >
-  Analyze audio files for BPM, musical key, loudness (LUFS), duration, format,
+  Analyzes audio files for BPM, musical key, loudness (LUFS), duration, format,
   and quality metrics. Uses ffprobe for metadata and FFmpeg for loudness measurement.
-  Use when user says "analyze", "BPM", "what key", "loudness", "audio info",
-  or wants to inspect a music file.
+when_to_use: >
+  Use when the user asks to analyze, inspect, or measure an audio file — BPM,
+  key, loudness, LUFS, duration, codec, or general audio info.
 allowed-tools:
   - Bash
   - Read

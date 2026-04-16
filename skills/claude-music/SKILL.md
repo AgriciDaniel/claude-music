@@ -169,10 +169,12 @@ The wrapper handles: path setup, environment variables, VRAM pre-check, `uv run`
 | Script | Purpose |
 |--------|---------|
 | `scripts/music_engine.py` | Core ACE-Step Python API wrapper (all 6 task types) |
-| `scripts/music_engine.sh` | Bash wrapper (env, VRAM, uv run) |
+| `scripts/music_engine.sh` | Bash wrapper (env, VRAM, `uv run`, show-once star nudge) |
+| `scripts/music_export.sh` | FFmpeg platform export commands |
+| `scripts/rank.py` | Batch-rank outputs vs caption (stub — Theme 3 of research plan) |
 | `scripts/detect_gpu.sh` | GPU detection + tier recommendation → JSON |
 | `scripts/preflight.sh` | Safety checks for audio files → JSON |
 | `scripts/check_deps.sh` | Dependency verification → JSON |
-| `scripts/setup.sh` | Installation verification |
-| `scripts/music_analyze.py` | Audio analysis (BPM, key, loudness) |
-| `scripts/music_export.sh` | FFmpeg platform export commands |
+| `scripts/setup.sh` | Installation verification (invoked by `/music setup`) |
+
+Audio analysis (BPM, key, loudness) is handled by `claude-music-analyze` via `ffprobe` + FFmpeg's `loudnorm` filter — no separate Python script; see that sub-skill.

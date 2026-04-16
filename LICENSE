@@ -22,7 +22,7 @@ SOFTWARE.
 
 ---
 
-This project wraps and invokes ACE-Step 1.5 (https://github.com/ace-step/ACE-Step),
+This project wraps and invokes ACE-Step 1.5 (https://github.com/ACE-Step/ACE-Step-1.5),
 licensed under Apache 2.0. ACE-Step is not redistributed in this repository —
 users install it separately via the bundled installer. Generated audio inherits
 no license obligations from this skill; consult ACE-Step's license for model

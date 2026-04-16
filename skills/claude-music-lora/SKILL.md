@@ -1,10 +1,12 @@
 ---
 name: claude-music-lora
 description: >
-  LoRA and LoKr fine-tuning for ACE-Step 1.5. Train custom styles from 3-10 songs,
-  manage trained adapters, apply during generation. Uses ACE-Step's built-in training.
-  Use when user says "LoRA", "train", "fine-tune", "custom style", "voice clone",
-  "LoKr", or wants to train a personalized music model.
+  LoRA and LoKr fine-tuning for ACE-Step 1.5. Trains custom styles from 3-10 songs,
+  manages trained adapters, and applies them during generation. Uses ACE-Step's
+  built-in training pipeline.
+when_to_use: >
+  Use when the user asks to train a LoRA, fine-tune, clone a voice, make a custom
+  style, or use LoKr for personalized music models.
 allowed-tools:
   - Bash
   - Read

@@ -1,11 +1,12 @@
 ---
 name: claude-music-cover
 description: >
-  Create cover versions and style transfers of existing songs using ACE-Step 1.5.
+  Creates cover versions and style transfers of existing songs using ACE-Step 1.5.
   Takes a reference audio file and generates a new version with different style,
   genre, or vocal characteristics while preserving musical structure.
-  Use when user says "cover", "style transfer", "remake", "version of", "reimagine",
-  or wants to transform an existing song.
+when_to_use: >
+  Use when the user asks to cover, remake, reimagine, style-transfer, or produce
+  a different version of an existing audio file.
 allowed-tools:
   - Bash
   - Read

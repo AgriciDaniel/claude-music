@@ -1,11 +1,12 @@
 ---
 name: claude-music-export
 description: >
-  Export music for specific platforms with optimal format, loudness, and metadata.
-  Supports Spotify, Apple Music, YouTube, TikTok, podcast, CD, streaming, and archive formats.
-  Uses FFmpeg for loudness normalization, format conversion, and metadata tagging.
-  Use when user says "export", "convert format", "prepare for Spotify", "normalize loudness",
-  "format conversion", or wants platform-optimized audio.
+  Exports music for specific platforms with optimal format, loudness, and metadata.
+  Supports Spotify, Apple Music, YouTube, TikTok, podcast, CD, streaming, and archive
+  formats. Uses FFmpeg for loudness normalization, format conversion, and metadata tagging.
+when_to_use: >
+  Use when the user asks to export, convert format, prepare for a specific platform
+  (Spotify, YouTube, TikTok, podcast, CD), normalize loudness, or tag audio metadata.
 allowed-tools:
   - Bash
   - Read

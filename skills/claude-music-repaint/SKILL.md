@@ -1,11 +1,12 @@
 ---
 name: claude-music-repaint
 description: >
-  Edit specific sections of a song using ACE-Step 1.5 repaint mode. Fix a bad chorus,
-  change instruments in a section, add/remove vocals, or regenerate any time range
-  while keeping the rest intact.
-  Use when user says "repaint", "edit section", "fix chorus", "change the bridge",
-  "regenerate part", or wants to modify a specific time range of a song.
+  Edits specific sections of a song using ACE-Step 1.5's repaint mode. Fixes a bad
+  chorus, changes instruments in a section, adds or removes vocals, or regenerates
+  any time range while keeping the rest intact.
+when_to_use: >
+  Use when the user asks to repaint, edit a section, fix a chorus, change a bridge,
+  regenerate part of a song, or modify a specific time range.
 allowed-tools:
   - Bash
   - Read

@@ -100,7 +100,9 @@ fi
 if command -v claude &>/dev/null; then
     print_ok "Claude Code found"
 else
-    print_warn "Claude Code CLI not detected (may be running as VS Code extension — that's fine)"
+    print_warn "Claude Code CLI not detected."
+    echo "         That's fine if you use the VS Code / JetBrains extension or the desktop app."
+    echo "         To install the CLI:   https://claude.com/claude-code"
 fi
 
 # ──────────────────────────────────────────────────────────────────────
@@ -202,16 +204,20 @@ if [ "$MODELS_OK" = false ]; then
     if [[ "${REPLY:-y}" =~ ^[Yy]?$ ]]; then
         echo "  Downloading models... (this may take 5-15 minutes)"
         cd "$ACE_STEP_DIR"
-        if uv run acestep-download 2>&1 | tail -5; then
-            print_ok "Models downloaded"
-        else
-            print_warn "Some models may not have downloaded. You can retry later with:"
-            echo "         cd $ACE_STEP_DIR && uv run acestep-download"
-        fi
+        uv run acestep-download 2>&1 | tail -5
+        DL_EXIT=${PIPESTATUS[0]}
         cd "$SCRIPT_DIR"
+        # Verify success: exit code 0 AND the turbo checkpoint dir now exists.
+        if [ "$DL_EXIT" -eq 0 ] && [ -d "$ACE_STEP_DIR/checkpoints/acestep-v15-turbo" ]; then
+            print_ok "Models downloaded and verified"
+        else
+            print_warn "Model download did not complete. Retry with:"
+            echo "         cd \"$ACE_STEP_DIR\" && uv run acestep-download"
+            echo "         Music generation will fail until this succeeds."
+        fi
     else
         print_warn "Skipping model download. Music generation won't work until models are downloaded."
-        echo "         Run later: cd $ACE_STEP_DIR && uv run acestep-download"
+        echo "         Run later: cd \"$ACE_STEP_DIR\" && uv run acestep-download"
     fi
 fi
 
@@ -220,18 +226,21 @@ fi
 # ──────────────────────────────────────────────────────────────────────
 print_step "4/6" "Saving your configuration..."
 
-python3 -c "
-import json
-config_path = '$CONFIG'
+# Pass the paths via environment variables, NOT string interpolation, so paths
+# containing single quotes or other shell meta-chars don't break the script.
+CONFIG_PATH="$CONFIG" ACE_DIR="$ACE_STEP_DIR" python3 <<'PYEOF'
+import json, os
+config_path = os.environ["CONFIG_PATH"]
+ace_dir = os.environ["ACE_DIR"]
 with open(config_path) as f:
     config = json.load(f)
-config['ace_step_dir'] = '$ACE_STEP_DIR'
-config['checkpoint_dir'] = '$ACE_STEP_DIR/checkpoints'
-with open(config_path, 'w') as f:
+config["ace_step_dir"] = ace_dir
+config["checkpoint_dir"] = os.path.join(ace_dir, "checkpoints")
+with open(config_path, "w") as f:
     json.dump(config, f, indent=2)
-    f.write('\n')
-print('  config.json updated')
-"
+    f.write("\n")
+print("  config.json updated")
+PYEOF
 print_ok "ACE-Step path: $ACE_STEP_DIR"
 print_ok "Output folder: ~/Music/claude-music-output/"
 

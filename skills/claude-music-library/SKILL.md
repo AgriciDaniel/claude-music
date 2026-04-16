@@ -1,10 +1,12 @@
 ---
 name: claude-music-library
 description: >
-  Browse, search, and manage generated music in ~/Music/claude-music-output/.
-  List recent generations, search by date, check disk usage, play files, clean up old output.
-  Use when user says "library", "list songs", "browse music", "recent generations",
-  "disk usage", "clean up", or wants to manage their music output.
+  Browses, searches, and manages generated music in ~/Music/claude-music-output/.
+  Lists recent generations, searches by date, checks disk usage, plays files,
+  and cleans up old output.
+when_to_use: >
+  Use when the user asks to browse the music library, list songs, see recent
+  generations, check disk usage, play a file, or clean up old output.
 allowed-tools:
   - Bash
   - Read

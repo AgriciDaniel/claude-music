@@ -1,11 +1,12 @@
 ---
 name: claude-music-generate
 description: >
-  Generate music from text descriptions and lyrics using ACE-Step 1.5 Python API.
+  Generates music from text descriptions and lyrics using ACE-Step 1.5's Python API.
   Creates full songs with vocals, instrumentals, or both. Supports 50+ languages,
-  10-600 second duration, quality presets (draft/standard/high/max), batch generation.
-  Use when user says "generate music", "make a song", "create a track", "text to music",
-  or wants to create new music from scratch.
+  10-600 second duration, quality presets (draft/standard/high/max), and batch generation.
+when_to_use: >
+  Use when the user asks to generate music, make a song, create a track,
+  do text-to-music, or produce new music from scratch.
 allowed-tools:
   - Bash
   - Read

@@ -100,11 +100,18 @@ foreach ($c in $candidates) {
 if (-not $aceDir) {
     $answer = Ask-User "ACE-Step not found. Clone it now to ${DEFAULT_ACE_DIR}? [Y/n]"
     if ($answer -eq "" -or $answer -match '^[Yy]') {
-        git clone https://github.com/ace-step/ACE-Step.git $DEFAULT_ACE_DIR
+        git clone https://github.com/ACE-Step/ACE-Step-1.5.git $DEFAULT_ACE_DIR
+        if ($LASTEXITCODE -ne 0) {
+            Write-Err "git clone failed. Check your internet connection and try again."
+            exit 1
+        }
         $aceDir = $DEFAULT_ACE_DIR
         Push-Location $aceDir
         Write-Host "  Installing ACE-Step Python deps (this can take 5-15 min)..."
         uv sync
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warn "uv sync reported errors. ACE-Step may still work — test with a small /music generate call."
+        }
         Pop-Location
         Write-Ok "ACE-Step installed"
     } else {
@@ -136,14 +143,23 @@ $hasTurbo = (Get-ChildItem -Path $ckpt -Filter "*turbo*" -ErrorAction SilentlyCo
 if ($hasTurbo) {
     Write-Ok "Turbo model present"
 } else {
-    $download = Ask-User "Download ACE-Step turbo model (~4GB)? [Y/n]"
+    $download = Ask-User "Download ACE-Step turbo model (~5GB)? [Y/n]"
     if ($download -eq "" -or $download -match '^[Yy]') {
         Push-Location $aceDir
-        uv run python -c "from acestep.model_download import ensure_model; ensure_model('acestep-v15-turbo')" 2>&1
+        # Match install.sh: use the acestep-download CLI exposed by pyproject.toml
+        # (entry point: acestep.model_downloader:main). 5-15 min typical.
+        uv run acestep-download
+        $dlExit = $LASTEXITCODE
         Pop-Location
-        Write-Ok "Model downloaded"
+        if ($dlExit -eq 0 -and (Get-ChildItem -Path $ckpt -Filter "*turbo*" -ErrorAction SilentlyContinue).Count -gt 0) {
+            Write-Ok "Model downloaded"
+        } else {
+            Write-Warn "Model download exited with code $dlExit. Retry later with:"
+            Write-Host  "    cd `"$aceDir`"; uv run acestep-download"
+        }
     } else {
-        Write-Warn "Skipped. First /music invocation will download on demand."
+        Write-Warn "Skipped. Music generation will fail until you run:"
+        Write-Host  "    cd `"$aceDir`"; uv run acestep-download"
     }
 }
 
