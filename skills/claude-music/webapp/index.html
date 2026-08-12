@@ -189,7 +189,8 @@
   <div class="card" id="player-card">
     <div class="eyebrow" id="player-eyebrow">Now playing</div>
     <h2 id="player-title" style="font-size:16px; margin:6px 0 0;"></h2>
-    <canvas id="wave" width="680" height="120"></canvas>
+    <canvas id="wave" width="680" height="140"></canvas>
+    <div class="bar-track" id="seek-track" style="cursor:pointer; margin-bottom:12px;"><div class="bar-fill" id="seek-fill"></div></div>
     <audio id="audio"></audio>
     <div class="player-controls">
       <button class="btn" id="play">Play</button>
@@ -525,6 +526,9 @@ audio.onpause = () => { $('play').textContent = 'Play'; stopWave(); };
 audio.onended = () => { $('play').textContent = 'Play'; stopWave(); };
 audio.ontimeupdate = () => {
   $('time').textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
+  const frac = isFinite(audio.duration) && audio.duration
+    ? audio.currentTime / audio.duration : 0;
+  $('seek-fill').style.width = (frac * 100) + '%';
   if (audio.paused) drawFrame();
 };
 const fmt = s => isFinite(s) ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
@@ -537,7 +541,7 @@ const fmt = s => isFinite(s) ? Math.floor(s / 60) + ':' + String(Math.floor(s % 
    eased per frame so it moves with the beat instead of jittering. */
 const canvas = $('wave'), ctx2d = canvas.getContext('2d');
 let peaks = null, decodeCtx = null, decodeToken = 0;
-let liveScale = 1, seeking = false;
+let seeking = false;
 
 function barLayout() {
   const w = canvas.width, pitch = 6, bw = 5;
@@ -613,19 +617,96 @@ function drawFrame(heights) {
   }
 }
 
-function startWave() {
-  const render = () => {
-    const base = baseHeights();
-    let target = 1;
-    if (analyser && actx !== 'failed') {
-      analyser.getByteFrequencyData(freq);
-      let bass = 0;
-      const nb = Math.max(4, freq.length >> 4);
-      for (let j = 0; j < nb; j++) bass += freq[j];
-      target = 0.72 + 0.42 * (bass / nb / 255);
+/* Live "wave" visualizer, ported from the music-visualizer component the
+   owner supplied: bottom-anchored bars, extreme contrast leveling so quiet
+   bars vanish and peaks explode, a synthetic traveling wave layered on the
+   real spectrum, double neighbor smoothing, spring easing, slow fade-out. */
+let waveH = null, waveV = null, waveA = null;
+
+function smoothArr(a) {
+  const out = a.slice();
+  for (let i = 1; i < out.length - 1; i++) {
+    out[i] = (a[i - 1] + a[i] * 2 + a[i + 1]) / 4;
+  }
+  return out;
+}
+
+function olaTargets(n) {
+  const t = new Array(n).fill(0.01);
+  if (!analyser || actx === 'failed') return t;
+  analyser.getByteFrequencyData(freq);
+  const useful = Math.floor(freq.length * 0.3);
+  let total = 0;
+  for (let i = 0; i < useful; i++) total += freq[i];
+  const avg = total / useful;
+  const half = n / 2;
+  const now = performance.now();
+  for (let i = 0; i < n; i++) {
+    let base;
+    if (i < half) {
+      base = (freq[Math.floor(i / half * useful)] || 0)
+        * (0.8 + Math.sin(now * 0.006 + i * 0.12) * 0.25
+           + Math.cos(now * 0.009 + i * 0.12) * 0.15);
+    } else {
+      const mirror = n - 1 - i;
+      base = (freq[Math.floor(mirror / half * useful)] || 0)
+        * (0.7 + Math.sin(now * 0.008 + i * 0.15) * 0.3
+           + Math.cos(now * 0.0096 + i * 0.15) * 0.2);
     }
-    liveScale += (target - liveScale) * 0.16;
-    drawFrame(base.map(h => 3 + (h - 3) * liveScale));
+    if (avg < 50) continue;
+    let v = base / 255;
+    v *= i < n * 0.25 ? 1.5 : i < n * 0.5 ? 1.2 : i < n * 0.75 ? 1.05 : 0.9;
+    v = Math.pow(Math.max(0, v), 0.4);
+    if (v > 0.8) v = Math.pow(v, 0.15) * 1.8;
+    else if (v > 0.7) v = Math.pow(v, 0.3) * 0.9;
+    else if (v > 0.5) v = Math.pow(v, 0.8) * 0.1;
+    else v = 0.01;
+    if (v < 0.45) v = 0.01;
+    t[i] = Math.max(0, Math.min(1.2, v));
+  }
+  return smoothArr(smoothArr(t));
+}
+
+function drawOla() {
+  const { n, pitch, bw } = barLayout();
+  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  ctx2d.fillStyle = '#D97757';
+  const H = canvas.height;
+  for (let i = 0; i < n; i++) {
+    const h = Math.min(H, Math.max(0, waveH[i]));
+    if (h < 1 || waveA[i] < 0.02) continue;
+    ctx2d.globalAlpha = Math.min(1, waveA[i]);
+    const x = i * pitch, y = H - h;
+    if (ctx2d.roundRect) {
+      ctx2d.beginPath();
+      ctx2d.roundRect(x, y, bw, h, 1);
+      ctx2d.fill();
+    } else ctx2d.fillRect(x, y, bw, h);
+  }
+  ctx2d.globalAlpha = 1;
+}
+
+function startWave() {
+  const { n } = barLayout();
+  if (!waveH || waveH.length !== n) {
+    waveH = new Array(n).fill(0);
+    waveV = new Array(n).fill(0);
+    waveA = new Array(n).fill(0);
+  }
+  const scale = (canvas.height - 4) / 1.2;
+  const render = () => {
+    const targets = olaTargets(n);
+    for (let i = 0; i < n; i++) {
+      const on = targets[i] > 0.02;
+      const target = on ? targets[i] * scale : 0;
+      // Spring toward the target: snappy rise, softer settle.
+      waveV[i] += (target - waveH[i]) * (on ? 0.2 : 0.08);
+      waveV[i] *= 0.7;
+      waveH[i] += waveV[i];
+      // Opacity: appear fast, melt away slowly.
+      waveA[i] += ((on ? 1 : 0) - waveA[i]) * (on ? 0.5 : 0.06);
+    }
+    drawOla();
     rafId = requestAnimationFrame(render);
   };
   cancelAnimationFrame(rafId);
@@ -634,7 +715,7 @@ function startWave() {
 
 function stopWave() {
   cancelAnimationFrame(rafId);
-  liveScale = 1;
+  waveH = waveV = waveA = null;
   drawFrame();
 }
 
@@ -647,12 +728,23 @@ function seekFromEvent(e) {
   }
 }
 canvas.addEventListener('pointerdown', e => {
+  if (!audio.paused) return; // while playing the canvas is the wave show
   seeking = true;
   canvas.setPointerCapture(e.pointerId);
   seekFromEvent(e);
 });
 canvas.addEventListener('pointermove', e => { if (seeking) seekFromEvent(e); });
 canvas.addEventListener('pointerup', () => { seeking = false; });
+
+const seekTrack = $('seek-track');
+seekTrack.addEventListener('pointerdown', e => {
+  const rect = seekTrack.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+  if (isFinite(audio.duration) && audio.duration) {
+    audio.currentTime = frac * audio.duration;
+    if (audio.paused) drawFrame();
+  }
+});
 
 /* ---------- actions ---------- */
 $('open-folder').onclick = () =>
