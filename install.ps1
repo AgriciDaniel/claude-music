@@ -127,6 +127,11 @@ if (-not $aceDir) {
 # 3. Update config.json
 # ----------------------------------------------------------------------
 Write-Step "3/6" "Updating config.json..."
+# config.json is per-machine and not tracked in git. Seed it from the example.
+if (-not (Test-Path $CONFIG)) {
+    Copy-Item (Join-Path $SKILLS_DIR "claude-music\config.example.json") $CONFIG
+    Write-Ok "config.json created from config.example.json"
+}
 $cfgJson = Get-Content $CONFIG -Raw | ConvertFrom-Json
 $cfgJson.ace_step_dir    = $aceDir
 $cfgJson.checkpoint_dir  = (Join-Path $aceDir "checkpoints")

@@ -1,14 +1,11 @@
 {
   "ace_step_dir": "CHANGE_ME",
-  "checkpoint_dir": "CHANGE_ME/checkpoints",
+  "checkpoint_dir": "CHANGE_ME",
   "output_dir": "~/Music/claude-music-output",
   "defaults": {
-    "model": "acestep-v15-turbo",
-    "lm_model": null,
-    "quality": "standard",
+    "quality": "high",
     "format": "flac",
-    "batch_size": 2,
-    "thinking": false,
+    "naming": "descriptive",
     "language": "en",
     "offload_to_cpu": true,
     "offload_dit_to_cpu": true,

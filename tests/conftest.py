@@ -16,6 +16,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "skills" / "claude-music" / "scripts"
 CONFIG_PATH = REPO_ROOT / "skills" / "claude-music" / "config.json"
+CONFIG_EXAMPLE_PATH = REPO_ROOT / "skills" / "claude-music" / "config.example.json"
 
 
 @pytest.fixture(scope="session")
@@ -25,7 +26,10 @@ def scripts_dir() -> Path:
 
 @pytest.fixture(scope="session")
 def config_json() -> dict:
-    with CONFIG_PATH.open() as f:
+    """Parsed config: the per-machine config.json when present (dev machines),
+    else the tracked config.example.json (CI, fresh clones)."""
+    path = CONFIG_PATH if CONFIG_PATH.exists() else CONFIG_EXAMPLE_PATH
+    with path.open() as f:
         return json.load(f)
 
 
@@ -33,6 +37,16 @@ def config_json() -> dict:
 def engine_source() -> str:
     """Raw source of music_engine.py — for AST / textual regression guards."""
     return (SCRIPTS_DIR / "music_engine.py").read_text()
+
+
+@pytest.fixture(scope="session")
+def engine_module(_scripts_importable):
+    """Imported music_engine module — for parser/preset resolution tests.
+
+    Importing is GPU-free: acestep is only imported inside initialize_acestep().
+    """
+    import music_engine
+    return music_engine
 
 
 @pytest.fixture(scope="session", autouse=True)

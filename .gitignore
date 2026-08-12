@@ -16,3 +16,6 @@ dist/
 build/
 .venv/
 venv/
+
+# Per-machine config (created by install.sh from config.example.json)
+skills/claude-music/config.json

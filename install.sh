@@ -226,6 +226,13 @@ fi
 # ──────────────────────────────────────────────────────────────────────
 print_step "4/6" "Saving your configuration..."
 
+# config.json is per-machine and not tracked in git. Seed it from the shipped
+# example on first install.
+if [ ! -f "$CONFIG" ]; then
+    cp "$SKILLS_DIR/claude-music/config.example.json" "$CONFIG"
+    echo "  config.json created from config.example.json"
+fi
+
 # Pass the paths via environment variables, NOT string interpolation, so paths
 # containing single quotes or other shell meta-chars don't break the script.
 CONFIG_PATH="$CONFIG" ACE_DIR="$ACE_STEP_DIR" python3 <<'PYEOF'
