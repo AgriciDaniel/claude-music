@@ -22,6 +22,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -561,10 +562,15 @@ class JobRunner:
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, env=env)
 
+        stderr_tail = deque(maxlen=40)
+
         def read_stderr():
             for line in proc.stderr:
                 ev = parse_progress_line(line)
                 if not ev:
+                    line = line.strip()
+                    if line:
+                        stderr_tail.append(line)
                     continue
                 if ev["event"] == "stage":
                     stage = ev.get("stage")
@@ -588,7 +594,9 @@ class JobRunner:
 
         result = parse_engine_stdout(stdout)
         if result is None:
-            tail = (stdout or "").strip()[-300:]
+            tail = (stdout or "").strip()[-300:] \
+                or " | ".join(list(stderr_tail)[-4:])[-400:] \
+                or "no output at all"
             err = f"Engine produced no JSON (exit {proc.returncode}): {tail}"
             return None, err, suggest_fix(err)
         if not result.get("success"):
@@ -606,6 +614,16 @@ class JobRunner:
                 self._set(status="loading", pct=None,
                           stage="Retrying with a single variant (low VRAM)")
                 request = dict(request, batch=1)
+                result, err, hint = self._attempt(request, cfg)
+            elif (err and result is None and "produced no JSON" in err
+                    and not request.get("_retried")):
+                # Launcher-level failures (e.g. a transient uv error while a
+                # previous run shuts down) produce no audio, so one blind
+                # retry is safe.
+                self._set(status="loading", pct=None,
+                          stage="Retrying after a launcher error")
+                time.sleep(2)
+                request = dict(request, _retried=True)
                 result, err, hint = self._attempt(request, cfg)
             if err:
                 self._set(status="error", error=err,
