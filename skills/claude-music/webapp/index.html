@@ -7,10 +7,14 @@
 <style>
   :root {
     --bg: #262624;
+    --card: #2B2A28;
+    --well: #232322;
     --fg: #F5F4ED;
     --brand: #D97757;
+    --brand-soft: rgba(217, 119, 87, 0.12);
     --muted: #9C9A92;
     --line: #3D3D3A;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.25);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -32,44 +36,89 @@
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--muted); display: inline-block;
   }
-  .status-dot.busy { background: var(--brand); }
-  .card { border: 1px solid var(--line); border-radius: 4px; padding: 20px; }
-  .card h2 { font-weight: 700; font-size: 22px; letter-spacing: -0.4px; margin-bottom: 14px; }
-  textarea {
-    width: 100%; min-height: 64px; resize: vertical;
-    background: transparent; color: var(--fg);
-    border: 1px solid var(--line); border-radius: 4px;
-    padding: 10px 12px; font: inherit;
+  .status-dot.busy { background: var(--brand); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(217, 119, 87, 0.45); }
+    50% { box-shadow: 0 0 0 6px rgba(217, 119, 87, 0); }
   }
-  textarea:focus, select:focus { outline: none; border-color: var(--muted); }
-  .section-label { margin: 16px 0 8px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line); border-radius: 8px; padding: 22px;
+    box-shadow: var(--shadow);
+  }
+  .card h2 { font-weight: 700; font-size: 20px; letter-spacing: -0.3px; margin-bottom: 14px; }
+  .composer {
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--well);
+    transition: border-color 0.15s ease;
+  }
+  .composer:focus-within { border-color: var(--muted); }
+  textarea {
+    width: 100%; min-height: 76px; resize: vertical; display: block;
+    background: transparent; color: var(--fg);
+    border: none; border-radius: 8px 8px 0 0;
+    padding: 14px 16px 6px; font: inherit;
+  }
+  textarea:focus, select:focus { outline: none; }
+  .composer-bar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 8px 10px 10px;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 10px; border-radius: 6px;
+    border: 1px solid transparent; background: transparent;
+    color: var(--muted); font-size: 12.5px; cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .chip:hover { background: rgba(245, 244, 237, 0.05); color: var(--fg); }
+  .chip.active { color: var(--brand); border-color: var(--brand); background: var(--brand-soft); }
+  .chip select {
+    background: transparent; color: var(--fg); border: none;
+    font: inherit; font-size: 12.5px; cursor: pointer;
+  }
+  .chip select option { background: var(--card); }
+  .section-label { margin: 18px 0 8px; }
   .pills { display: flex; flex-wrap: wrap; gap: 8px; }
   .pill {
-    height: 22px; padding: 0 12px; border-radius: 11px;
-    border: 1px solid var(--muted); background: transparent;
-    color: var(--fg); font-size: 12px; cursor: pointer;
+    height: 24px; padding: 0 12px; border-radius: 12px;
+    border: 1px solid var(--line); background: transparent;
+    color: var(--muted); font-size: 12px; cursor: pointer;
     display: inline-flex; align-items: center;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
   }
-  .pill.active { border: 1.6px solid var(--brand); color: var(--brand); padding: 0 11px; }
+  .pill:hover { border-color: var(--muted); color: var(--fg); }
+  .pill.active {
+    border-color: var(--brand); color: var(--brand);
+    background: var(--brand-soft);
+  }
+  .pill-more { border-style: dashed; }
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
   select {
-    background: var(--bg); color: var(--fg);
-    border: 1px solid var(--line); border-radius: 4px;
+    background: var(--card); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 6px;
     padding: 6px 10px; font: inherit; font-size: 13px;
   }
   .field { display: flex; align-items: center; gap: 8px; }
   .field label { font-size: 13px; color: var(--muted); }
   .btn {
-    border: 1px solid var(--line); border-radius: 4px;
+    border: 1px solid var(--line); border-radius: 6px;
     background: transparent; color: var(--fg);
     padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
   }
-  .btn:hover { border-color: var(--muted); }
+  .btn:hover { border-color: var(--muted); background: rgba(245, 244, 237, 0.04); }
+  .btn:active { transform: translateY(1px); }
   .btn-primary {
-    background: var(--brand); border-color: var(--brand);
-    color: var(--bg); font-weight: 700; margin-left: auto;
+    background: var(--brand); border: 1px solid var(--brand);
+    color: #1E1D1B; font-weight: 700; margin-left: auto;
+    padding: 8px 20px; border-radius: 6px; font-size: 13px; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(217, 119, 87, 0.25);
+    transition: filter 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
   }
-  .btn-primary:disabled { opacity: 0.5; cursor: default; }
+  .btn-primary:hover { filter: brightness(1.08); box-shadow: 0 6px 18px rgba(217, 119, 87, 0.35); }
+  .btn-primary:active { transform: translateY(1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: default; filter: none; }
   #progress-row { display: none; margin-top: 16px; }
   #progress-row.on { display: block; }
   .bar-track { height: 2px; background: var(--line); border-radius: 1px; }
@@ -85,10 +134,13 @@
   .star.on { color: var(--brand); }
   .track {
     display: flex; align-items: center; gap: 12px;
-    padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer;
+    padding: 11px 10px; margin: 0 -10px;
+    border-bottom: 1px solid var(--line); border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s ease;
   }
   .track:last-child { border-bottom: none; }
-  .track:hover { background: rgba(245, 244, 237, 0.03); }
+  .track:hover { background: rgba(245, 244, 237, 0.045); }
   .track.playing .track-title { color: var(--brand); }
   .track-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .track-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
@@ -144,39 +196,40 @@
 
   <div class="card">
     <h2>Generate song</h2>
-    <textarea id="prompt" maxlength="512" placeholder="Describe your song, e.g. dreamy indie track about a rainy city"></textarea>
+    <div class="composer">
+      <textarea id="prompt" maxlength="512" placeholder="Describe the song you want to create..."></textarea>
+      <div class="composer-bar">
+        <button class="chip" id="instrumental" title="No vocals">Instrumental</button>
+        <label class="chip" title="Track length">
+          <select id="duration">
+            <option value="30">30 s</option>
+            <option value="60" selected>1 min</option>
+            <option value="120">2 min</option>
+            <option value="180">3 min</option>
+            <option value="240">4 min</option>
+            <option value="300">5 min</option>
+            <option value="480">8 min</option>
+            <option value="600">10 min</option>
+          </select>
+        </label>
+        <label class="chip" title="Model quality preset">
+          <select id="quality">
+            <option value="draft">draft</option>
+            <option value="standard">standard</option>
+            <option value="high" selected>high</option>
+            <option value="max">max</option>
+          </select>
+        </label>
+        <button class="btn-primary" id="generate">Generate</button>
+      </div>
+    </div>
+    <div class="progress-meta mono" style="margin-top:8px"><span id="quality-hint"></span></div>
 
     <div class="eyebrow section-label">Styles</div>
     <div class="pills" id="genre-pills"></div>
 
     <div class="eyebrow section-label">Presets</div>
     <div class="pills" id="preset-pills"></div>
-
-    <div class="row">
-      <button class="pill" id="instrumental">Instrumental</button>
-      <div class="field"><label for="duration">Duration</label>
-        <select id="duration">
-          <option value="30">30 s</option>
-          <option value="60" selected>60 s</option>
-          <option value="120">2 min</option>
-          <option value="180">3 min</option>
-          <option value="240">4 min</option>
-          <option value="300">5 min</option>
-          <option value="480">8 min</option>
-          <option value="600">10 min</option>
-        </select>
-      </div>
-      <div class="field"><label for="quality">Quality</label>
-        <select id="quality">
-          <option value="draft">draft</option>
-          <option value="standard">standard</option>
-          <option value="high" selected>high</option>
-          <option value="max">max</option>
-        </select>
-      </div>
-      <button class="btn btn-primary" id="generate">Generate</button>
-    </div>
-    <div class="progress-meta mono" style="margin-top:8px"><span id="quality-hint"></span></div>
 
     <div id="progress-row">
       <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
@@ -250,7 +303,7 @@ const $ = id => document.getElementById(id);
 const state = {
   genres: [], presets: [], selected: new Set(),
   instrumental: false, busy: false, current: null, tracks: [],
-  pollTimer: null,
+  pollTimer: null, showAllGenres: false,
 };
 
 /* ---------- data loading ---------- */
@@ -309,20 +362,38 @@ function showError(msg, suggestion) {
 }
 
 /* ---------- pills ---------- */
-function renderPills() {
+const GENRES_COLLAPSED = 8;
+
+function renderGenrePills() {
   const gp = $('genre-pills');
   gp.textContent = '';
-  for (const g of state.genres) {
+  const visible = state.showAllGenres
+    ? state.genres
+    : state.genres.filter((g, i) => i < GENRES_COLLAPSED || state.selected.has(g.name));
+  for (const g of visible) {
     const b = document.createElement('button');
-    b.className = 'pill';
+    b.className = 'pill' + (state.selected.has(g.name) ? ' active' : '');
     b.textContent = g.name;
     b.onclick = () => {
       if (state.selected.has(g.name)) state.selected.delete(g.name);
       else state.selected.add(g.name);
-      b.classList.toggle('active');
+      renderGenrePills();
     };
     gp.appendChild(b);
   }
+  const hidden = state.genres.length - visible.length;
+  const more = document.createElement('button');
+  more.className = 'pill pill-more';
+  more.textContent = state.showAllGenres ? 'Show fewer' : '+ ' + hidden + ' more';
+  more.onclick = () => {
+    state.showAllGenres = !state.showAllGenres;
+    renderGenrePills();
+  };
+  if (state.showAllGenres || hidden > 0) gp.appendChild(more);
+}
+
+function renderPills() {
+  renderGenrePills();
   const pp = $('preset-pills');
   pp.textContent = '';
   for (const p of state.presets) {
@@ -337,8 +408,7 @@ function renderPills() {
 function applyPreset(p) {
   $('prompt').value = p.caption;
   state.selected = new Set(p.genres || []);
-  [...$('genre-pills').children].forEach(b =>
-    b.classList.toggle('active', state.selected.has(b.textContent)));
+  renderGenrePills();
   state.instrumental = !!p.instrumental;
   $('instrumental').classList.toggle('active', state.instrumental);
   if (p.duration) $('duration').value = closest([30, 60, 120, 180, 240, 300, 480, 600], p.duration);
@@ -395,6 +465,7 @@ function setBusy(on) {
   state.busy = on;
   $('dot').classList.toggle('busy', on);
   $('generate').disabled = on;
+  $('generate').textContent = on ? 'Generating...' : 'Generate';
   $('progress-row').classList.toggle('on', on);
 }
 
@@ -765,8 +836,7 @@ $('similar').onclick = async () => {
   }
   $('prompt').value = t.caption || '';
   state.selected = new Set(t.genres || []);
-  [...$('genre-pills').children].forEach(b =>
-    b.classList.toggle('active', state.selected.has(b.textContent)));
+  renderGenrePills();
   state.instrumental = !!t.instrumental;
   $('instrumental').classList.toggle('active', state.instrumental);
   if (t.duration) $('duration').value = closest([30, 60, 120, 180, 240, 300, 480, 600], t.duration);
