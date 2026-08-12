@@ -294,8 +294,6 @@
         <button class="btn-primary" id="generate"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px; margin-right:6px"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg><span id="generate-label">Generate</span></button>
       </div>
     </div>
-    <div class="progress-meta mono" style="margin-top:8px"><span id="quality-hint"></span></div>
-
     <div id="progress-row">
       <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
       <div class="progress-meta mono">
@@ -406,19 +404,13 @@ const QUALITY_VRAM_MB = { draft: 4000, standard: 4000, high: 4000, max: 8000 };
 
 function updateQualityHint() {
   const q = $('quality').value;
-  const el = $('quality-hint');
-  // Keep the line empty unless there is a real compatibility warning;
-  // preset descriptions live in the select's tooltip instead.
-  el.textContent = '';
-  el.style.color = '';
   $('quality').title = QUALITY_HINTS[q] || '';
   const free = state.freeVram;
   if (free !== null && free !== undefined && free < QUALITY_VRAM_MB[q]) {
     const rec = q === 'max' ? 'high' : 'draft';
-    el.textContent = 'Your GPU has only ' + (free / 1024).toFixed(1)
+    showError('Your GPU has only ' + (free / 1024).toFixed(1)
       + ' GB free right now, which may be too little for ' + q
-      + '. Recommended: ' + rec + ', or close other GPU apps first.';
-    el.style.color = 'var(--brand)';
+      + ' quality. Recommended: ' + rec + ', or close other GPU apps first.');
   }
 }
 $('quality').onchange = updateQualityHint;
@@ -430,10 +422,6 @@ async function init() {
     if (!status.configured) $('setup-note').classList.add('on');
     state.freeVram = status.free_vram_mb;
     updateQualityHint();
-    if (status.free_vram_mb !== null && status.free_vram_mb !== undefined && status.free_vram_mb < 4000) {
-      showError('Low free VRAM (' + (status.free_vram_mb / 1024).toFixed(1)
-        + ' GB). Close other GPU apps, or use draft quality and short durations.');
-    }
     if (status.busy) startPolling();
     const g = await api('/api/genres');
     state.genres = g.genres || [];
