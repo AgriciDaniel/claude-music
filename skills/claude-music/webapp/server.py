@@ -227,6 +227,45 @@ def build_audit(probe, loudnorm):
     return report
 
 
+MIN_GENERATION_VRAM_MB = 4000
+
+
+def gpu_hog_processes(limit=4):
+    """Top GPU memory consumers as (name, mb), best-effort."""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-compute-apps=pid,used_memory",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5)
+        rows = []
+        for line in out.stdout.strip().splitlines():
+            pid_s, mem_s = [p.strip() for p in line.split(",")]
+            name = pid_s
+            try:
+                args = Path(f"/proc/{pid_s}/cmdline").read_bytes() \
+                    .decode(errors="replace").split("\0")
+                name = next((Path(a).name for a in args
+                             if a.endswith(".py")), None) \
+                    or Path(args[0]).name or pid_s
+            except Exception:
+                pass
+            rows.append((name, int(mem_s)))
+        rows.sort(key=lambda r: -r[1])
+        return rows[:limit]
+    except Exception:
+        return []
+
+
+def vram_block_message(free_mb, hogs):
+    """Fail-fast message when free VRAM cannot fit a generation."""
+    msg = (f"Not enough free VRAM to generate: {free_mb / 1024:.1f} GB free, "
+           f"about {MIN_GENERATION_VRAM_MB / 1000:.0f} GB needed.")
+    if hogs:
+        top = ", ".join(f"{n} ({m / 1024:.1f} GB)" for n, m in hogs)
+        msg += f" Currently holding the GPU: {top}."
+    return msg + " Close other GPU apps, then try again."
+
+
 def suggest_fix(error_msg):
     """Map common engine failures to a plain-language suggestion."""
     msg = (error_msg or "").lower()
@@ -257,6 +296,26 @@ def free_vram_mb():
         return int(out.stdout.strip().splitlines()[0])
     except Exception:
         return None
+
+
+def parse_engine_stdout(stdout):
+    """Parse the engine's result JSON, tolerating stray stdout noise.
+
+    The high preset's LM stack can print to stdout before the engine's
+    JSON. Scan for the first line that starts a parseable-to-EOF object.
+    """
+    try:
+        return json.loads(stdout)
+    except (TypeError, ValueError):
+        pass
+    lines = (stdout or "").splitlines()
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith("{"):
+            try:
+                return json.loads("\n".join(lines[i:]))
+            except ValueError:
+                continue
+    return None
 
 
 def parse_progress_line(line):
@@ -527,9 +586,8 @@ class JobRunner:
             return None, "Generation timed out", suggest_fix("timed out")
         t_err.join(timeout=5)
 
-        try:
-            result = json.loads(stdout)
-        except ValueError:
+        result = parse_engine_stdout(stdout)
+        if result is None:
             tail = (stdout or "").strip()[-300:]
             err = f"Engine produced no JSON (exit {proc.returncode}): {tail}"
             return None, err, suggest_fix(err)
@@ -939,6 +997,11 @@ class Handler(BaseHTTPRequestHandler):
                         self._json({"error": "source track not found"}, 404)
                         return
                     req["src_path"] = str(src)
+                free = free_vram_mb()
+                if free is not None and free < MIN_GENERATION_VRAM_MB:
+                    self._json({"error": vram_block_message(
+                        free, gpu_hog_processes())}, 503)
+                    return
                 start_err = self.runner.start(req, self.meta_store)
                 if start_err == "busy":
                     self._json({"error": "A generation is already running"}, 409)

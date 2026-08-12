@@ -141,6 +141,19 @@ def test_parse_engine_filename(server_module):
 # (f) NDJSON progress parsing
 # ---------------------------------------------------------------------------
 
+def test_parse_engine_stdout_tolerates_noise(server_module):
+    f = server_module.parse_engine_stdout
+    clean = '{"success": true, "count": 2}'
+    assert f(clean)["success"] is True
+    noisy = 'Loading checkpoint shards: 100%\nSome LM banner {not json}\n' + clean
+    assert f(noisy)["count"] == 2
+    multiline = 'junk\n{\n  "success": true,\n  "outputs": []\n}'
+    assert f(multiline)["success"] is True
+    assert f("no json at all") is None
+    assert f("") is None
+    assert f(None) is None
+
+
 def test_parse_progress_line(server_module):
     f = server_module.parse_progress_line
     assert f('{"event": "progress", "pct": 0.4}')["pct"] == 0.4
@@ -167,6 +180,15 @@ def test_suggest_fix_maps_common_failures(server_module):
 def test_free_vram_returns_int_or_none(server_module):
     v = server_module.free_vram_mb()
     assert v is None or isinstance(v, int)
+
+
+def test_vram_block_message(server_module):
+    msg = server_module.vram_block_message(
+        3661, [("dictation-daemon.py", 4242), ("transcribe_server.py", 2302)])
+    assert "3.6 GB free" in msg
+    assert "dictation-daemon.py (4.1 GB)" in msg
+    assert "Close other GPU apps" in msg
+    assert "GB needed" in server_module.vram_block_message(100, [])
 
 
 # ---------------------------------------------------------------------------

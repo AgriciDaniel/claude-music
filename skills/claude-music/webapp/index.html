@@ -562,7 +562,7 @@ $('generate').onclick = async () => {
       body: JSON.stringify(req),
     });
     startPolling();
-  } catch (e) { showError(e.message); }
+  } catch (e) { showError(e.message, null, true); }
 };
 
 function setBusy(on) {
