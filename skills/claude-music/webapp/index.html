@@ -177,6 +177,24 @@
     width: 34px; height: 34px; background: var(--well);
   }
   .thumb svg { display: block; width: 100%; height: 100%; }
+  .thumb svg .drift {
+    transform-box: fill-box; transform-origin: center;
+  }
+  @keyframes drift-a {
+    from { transform: translate(0, 0) rotate(0deg); }
+    to { transform: translate(5px, -6px) rotate(8deg); }
+  }
+  @keyframes drift-b {
+    from { transform: translate(0, 0) rotate(0deg); }
+    to { transform: translate(-6px, 5px) rotate(-7deg); }
+  }
+  @keyframes drift-c {
+    from { transform: translate(0, 0) scale(1); }
+    to { transform: translate(3px, 5px) scale(1.12); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .thumb svg .drift { animation: none !important; }
+  }
   .thumb-lg { width: 64px; height: 64px; border-radius: 8px; }
   .player-head { display: flex; gap: 14px; align-items: center; }
   .player-meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
@@ -433,7 +451,7 @@ async function init() {
   } catch (e) { showError(e.message); }
 }
 
-function showError(msg, suggestion) {
+function showError(msg, suggestion, sticky) {
   const n = $('error-note');
   n.textContent = '';
   const m = document.createElement('div');
@@ -446,9 +464,20 @@ function showError(msg, suggestion) {
     s.textContent = suggestion;
     n.appendChild(s);
   }
+  if (sticky) {
+    const d = document.createElement('div');
+    d.style.marginTop = '8px';
+    d.className = 'eyebrow';
+    d.textContent = 'Click to dismiss';
+    n.appendChild(d);
+  }
+  n.style.cursor = sticky ? 'pointer' : '';
+  n.onclick = () => n.classList.remove('on');
   n.classList.add('on');
   clearTimeout(n._t);
-  n._t = setTimeout(() => n.classList.remove('on'), suggestion ? 20000 : 8000);
+  if (!sticky) {
+    n._t = setTimeout(() => n.classList.remove('on'), suggestion ? 20000 : 8000);
+  }
 }
 
 /* ---------- pills ---------- */
@@ -569,7 +598,8 @@ async function poll() {
   setBusy(false);
   state.pendingCaption = null;
   if (snap.status === 'error') {
-    showError(snap.error || 'Generation failed', snap.suggestion);
+    showError('Generation failed: ' + (snap.error || 'unknown error').split('.')[0]
+      + '.', snap.suggestion, true);
     await refreshLibrary();
   }
   if (snap.status === 'done') {
@@ -634,6 +664,13 @@ function artSVG(t) {
     return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
   };
   const gid = 'g' + (hashStr(id) % 100000);
+  // Each shape drifts softly, with seeded (stable) duration/phase/direction.
+  const driftStyle = () => {
+    const name = ['drift-a', 'drift-b', 'drift-c'][Math.floor(rand() * 3)];
+    const dur = (7 + rand() * 8).toFixed(1);
+    const delay = (-rand() * 10).toFixed(1);
+    return `style="animation:${name} ${dur}s ease-in-out ${delay}s infinite alternate"`;
+  };
   let shapes = '';
   const count = 3 + Math.floor(rand() * 2);
   for (let i = 0; i < count; i++) {
@@ -642,15 +679,16 @@ function artSVG(t) {
     const op = (0.14 + rand() * 0.22).toFixed(2);
     const useCircle = kind === 'circles' || (kind === 'mixed' && rand() < 0.5);
     if (useCircle) {
-      shapes += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(size / 2).toFixed(1)}" fill="#F5F4ED" opacity="${op}"/>`;
+      shapes += `<circle class="drift" ${driftStyle()} cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(size / 2).toFixed(1)}" fill="#F5F4ED" opacity="${op}"/>`;
     } else {
       const rot = Math.floor(rand() * 90);
-      shapes += `<rect x="${(cx - size / 2).toFixed(1)}" y="${(cy - size / 2).toFixed(1)}" width="${size.toFixed(1)}" height="${size.toFixed(1)}" rx="2" fill="#F5F4ED" opacity="${op}" transform="rotate(${rot} ${cx.toFixed(1)} ${cy.toFixed(1)})"/>`;
+      shapes += `<g transform="rotate(${rot} ${cx.toFixed(1)} ${cy.toFixed(1)})">`
+        + `<rect class="drift" ${driftStyle()} x="${(cx - size / 2).toFixed(1)}" y="${(cy - size / 2).toFixed(1)}" width="${size.toFixed(1)}" height="${size.toFixed(1)}" rx="2" fill="#F5F4ED" opacity="${op}"/></g>`;
     }
   }
   // One accent shape in the gradient's brighter tone.
   const ax = 15 + rand() * 66, ay = 15 + rand() * 66;
-  shapes += `<circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${(5 + rand() * 8).toFixed(1)}" fill="${c2}" opacity="0.9"/>`;
+  shapes += `<circle class="drift" ${driftStyle()} cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${(5 + rand() * 8).toFixed(1)}" fill="${c2}" opacity="0.9"/>`;
   return `<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">`
     + `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1">`
     + `<stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/>`

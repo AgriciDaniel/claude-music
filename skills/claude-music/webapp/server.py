@@ -464,10 +464,13 @@ class JobRunner:
                "--output-dir", out_dir]
         if request.get("seed") is not None:
             cmd += ["--seed", str(int(request["seed"]))]
+        if request.get("batch"):
+            cmd += ["--batch", str(int(request["batch"]))]
         if request.get("task") == "cover":
             # Covers default to one variant: kinder to VRAM, and variant
             # exploration matters less when following a source.
-            cmd += ["--batch", str(int(request.get("batch") or 1))]
+            if not request.get("batch"):
+                cmd += ["--batch", "1"]
             cmd += ["cover", "--src-audio", request["src_path"],
                     "--cover-strength", str(request.get("cover_strength", 0.5))]
             if request.get("caption"):
@@ -487,58 +490,70 @@ class JobRunner:
             cmd += ["--key", str(request["key"])]
         return cmd, quality, out_dir
 
+    def _attempt(self, request, cfg):
+        """One engine subprocess run. Returns (result, error, suggestion)."""
+        cmd, quality, out_dir = self._build_cmd(request, cfg)
+        env = dict(os.environ,
+                   TOKENIZERS_PARALLELISM="false",
+                   TORCHAUDIO_USE_BACKEND="ffmpeg",
+                   PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True")
+        proc = subprocess.Popen(
+            cmd, cwd=os.path.expanduser(cfg["ace_step_dir"]),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, env=env)
+
+        def read_stderr():
+            for line in proc.stderr:
+                ev = parse_progress_line(line)
+                if not ev:
+                    continue
+                if ev["event"] == "stage":
+                    stage = ev.get("stage")
+                    self._set(stage=stage,
+                              status="generating" if stage == "generating"
+                              else "loading")
+                elif ev["event"] == "progress":
+                    if ev.get("pct") is not None:
+                        self._set(status="generating", pct=ev["pct"],
+                                  stage=ev.get("stage") or None)
+
+        t_err = threading.Thread(target=read_stderr, daemon=True)
+        t_err.start()
+        try:
+            stdout, _ = proc.communicate(timeout=GENERATION_TIMEOUT_SEC)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return None, "Generation timed out", suggest_fix("timed out")
+        t_err.join(timeout=5)
+
+        try:
+            result = json.loads(stdout)
+        except ValueError:
+            tail = (stdout or "").strip()[-300:]
+            err = f"Engine produced no JSON (exit {proc.returncode}): {tail}"
+            return None, err, suggest_fix(err)
+        if not result.get("success"):
+            err = result.get("error") or "Generation failed"
+            return None, err, result.get("suggestion") or suggest_fix(err)
+        return result, None, None
+
     def _run(self, request, cfg, meta_store):
         try:
-            cmd, quality, out_dir = self._build_cmd(request, cfg)
-            env = dict(os.environ,
-                       TOKENIZERS_PARALLELISM="false",
-                       TORCHAUDIO_USE_BACKEND="ffmpeg",
-                       PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True")
-            proc = subprocess.Popen(
-                cmd, cwd=os.path.expanduser(cfg["ace_step_dir"]),
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, env=env)
-
-            def read_stderr():
-                for line in proc.stderr:
-                    ev = parse_progress_line(line)
-                    if not ev:
-                        continue
-                    if ev["event"] == "stage":
-                        stage = ev.get("stage")
-                        self._set(stage=stage,
-                                  status="generating" if stage == "generating"
-                                  else "loading")
-                    elif ev["event"] == "progress":
-                        if ev.get("pct") is not None:
-                            self._set(status="generating", pct=ev["pct"],
-                                      stage=ev.get("stage") or None)
-
-            t_err = threading.Thread(target=read_stderr, daemon=True)
-            t_err.start()
-            try:
-                stdout, _ = proc.communicate(timeout=GENERATION_TIMEOUT_SEC)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.communicate()
-                self._set(status="error", error="Generation timed out",
-                          suggestion=suggest_fix("timed out"))
-                return
-            t_err.join(timeout=5)
-
-            try:
-                result = json.loads(stdout)
-            except ValueError:
-                tail = (stdout or "").strip()[-300:]
-                err = f"Engine produced no JSON (exit {proc.returncode}): {tail}"
+            result, err, hint = self._attempt(request, cfg)
+            if (err and "out of memory" in err.lower()
+                    and not request.get("batch")):
+                # VRAM is tight: retry once with a single variant, which
+                # roughly halves the engine's working memory.
+                self._set(status="loading", pct=None,
+                          stage="Retrying with a single variant (low VRAM)")
+                request = dict(request, batch=1)
+                result, err, hint = self._attempt(request, cfg)
+            if err:
                 self._set(status="error", error=err,
-                          suggestion=suggest_fix(err))
+                          suggestion=hint or suggest_fix(err))
                 return
-            if not result.get("success"):
-                err = result.get("error") or "Generation failed"
-                self._set(status="error", error=err,
-                          suggestion=result.get("suggestion") or suggest_fix(err))
-                return
+            quality = (self._build_cmd(request, cfg))[1]
 
             gen_sec = (result.get("timing") or {}).get("generation_sec")
             if gen_sec:
