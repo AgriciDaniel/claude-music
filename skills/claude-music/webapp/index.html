@@ -105,9 +105,34 @@
   }
   #setup-note.on, #error-note.on { display: block; }
   .footer { color: var(--muted); font-size: 11px; letter-spacing: 1.8px; text-transform: uppercase; font-weight: 700; text-align: center; }
+  #drop-overlay {
+    position: fixed; inset: 0; display: none; z-index: 10;
+    background: rgba(38, 38, 36, 0.92);
+    align-items: center; justify-content: center;
+  }
+  #drop-overlay.on { display: flex; }
+  .drop-box {
+    border: 1.6px dashed var(--brand); border-radius: 4px; color: var(--brand);
+    padding: 48px 64px; font-weight: 700; letter-spacing: 1.8px;
+    text-transform: uppercase; font-size: 13px;
+  }
+  .drop-hint { color: var(--muted); font-size: 12px; margin-top: 12px; }
+  #wave { cursor: pointer; }
+  #audit-panel { display: none; margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  #audit-panel.on { display: block; }
+  .audit-line { font-size: 13px; margin-top: 6px; color: var(--fg); }
+  .audit-line .lvl {
+    font-weight: 700; letter-spacing: 1px; font-size: 10px;
+    text-transform: uppercase; margin-right: 8px; color: var(--muted);
+  }
+  .audit-line .lvl-warn { color: var(--brand); }
+  .audit-fix { color: var(--muted); }
+  #similar-strength { display: none; margin-top: 12px; align-items: center; }
+  #similar-strength.on { display: flex; }
 </style>
 </head>
 <body>
+<div id="drop-overlay"><div class="drop-box">Drop your song</div></div>
 <div class="wrap">
   <header>
     <div class="eyebrow">Claude Music</div>
@@ -172,13 +197,32 @@
       <a class="btn" id="download" download>Download</a>
       <button class="btn" id="open-folder">Open folder</button>
       <button class="btn" id="similar">Similar</button>
+      <button class="btn" id="audit">Audit</button>
+      <div class="field">
+        <select id="opt-target">
+          <option value="spotify" selected>Spotify</option>
+          <option value="apple">Apple Music</option>
+          <option value="youtube">YouTube</option>
+          <option value="tiktok">TikTok</option>
+          <option value="podcast">Podcast</option>
+        </select>
+        <button class="btn" id="optimize">Optimize</button>
+      </div>
       <span class="stars" id="stars"></span>
     </div>
+    <div class="pills" id="similar-strength">
+      <span class="eyebrow" style="margin-right:6px">Similarity</span>
+      <button class="pill" data-s="0.3">Loose</button>
+      <button class="pill" data-s="0.5">Balanced</button>
+      <button class="pill" data-s="0.7">Faithful</button>
+    </div>
+    <div id="audit-panel"></div>
   </div>
 
   <div class="card">
     <div class="eyebrow">Library</div>
     <div id="library"></div>
+    <div class="drop-hint">Drag and drop an audio file anywhere on this page to add your own song, then audit, optimize, or generate similar tracks from it.</div>
   </div>
 
   <div class="card">
@@ -410,10 +454,14 @@ async function refreshLibrary() {
     stars.className = 'track-stars';
     stars.textContent = t.rating ? '★'.repeat(t.rating) : '';
     row.append(title, stars, meta);
-    if (t.quality) {
+    const badge = t.source === 'upload' ? 'upload'
+      : t.source === 'optimized' ? (t.target || 'optimized')
+      : t.task === 'cover' ? 'cover'
+      : t.quality;
+    if (badge) {
       const q = document.createElement('span');
       q.className = 'quality-pill';
-      q.textContent = t.quality;
+      q.textContent = badge;
       row.appendChild(q);
     }
     row.onclick = () => loadTrack(t, true);
@@ -444,7 +492,10 @@ function loadTrack(t, autoplay) {
   audio.src = '/api/audio/' + encodeURIComponent(t.file);
   renderStars(t.rating || 0);
   highlightPlaying();
-  drawStatic();
+  $('audit-panel').classList.remove('on');
+  $('similar-strength').classList.remove('on');
+  drawFrame();
+  loadPeaks(t);
   if (autoplay) playPause(true);
 }
 
@@ -474,12 +525,19 @@ audio.onpause = () => { $('play').textContent = 'Play'; stopWave(); };
 audio.onended = () => { $('play').textContent = 'Play'; stopWave(); };
 audio.ontimeupdate = () => {
   $('time').textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
+  if (audio.paused) drawFrame();
 };
 const fmt = s => isFinite(s) ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
 
-/* Waveform: brand geometry - bars width 5, pitch 6, radius 1, #D97757,
-   symmetric envelope around the vertical center, tallest mid-canvas. */
+/* Waveform: brand geometry - bars width 5, pitch 6, radius 1.
+   The bars are the real silhouette of the loaded track (decoded once per
+   track); the played portion renders in brand orange, the rest in the
+   hairline grey, and clicking or dragging on the canvas seeks. While
+   playing, the whole silhouette breathes with the low-frequency energy,
+   eased per frame so it moves with the beat instead of jittering. */
 const canvas = $('wave'), ctx2d = canvas.getContext('2d');
+let peaks = null, decodeCtx = null, decodeToken = 0;
+let liveScale = 1, seeking = false;
 
 function barLayout() {
   const w = canvas.width, pitch = 6, bw = 5;
@@ -487,13 +545,66 @@ function barLayout() {
   return { n, pitch, bw, mid: canvas.height / 2 };
 }
 
-function drawBars(heights) {
-  const { n, pitch, bw, mid } = barLayout();
-  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
-  ctx2d.fillStyle = '#D97757';
+function envelope(i, n) {
+  const t = i / (n - 1);
+  return Math.sin(Math.PI * t) ** 1.5;
+}
+
+async function loadPeaks(t) {
+  const token = ++decodeToken;
+  peaks = null;
+  try {
+    decodeCtx = decodeCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const buf = await fetch('/api/audio/' + encodeURIComponent(t.file))
+      .then(r => r.arrayBuffer());
+    const audioBuf = await decodeCtx.decodeAudioData(buf);
+    if (token !== decodeToken) return;
+    peaks = computePeaks(audioBuf, barLayout().n);
+  } catch (e) { peaks = null; }
+  if (token === decodeToken && audio.paused) drawFrame();
+}
+
+function computePeaks(buf, n) {
+  const ch = buf.getChannelData(0);
+  const slice = Math.floor(ch.length / n) || 1;
+  const out = new Array(n);
+  let max = 0;
   for (let i = 0; i < n; i++) {
-    const h = Math.max(3, heights[i]);
+    let sum = 0, cnt = 0;
+    const start = i * slice, step = Math.max(1, Math.floor(slice / 60));
+    for (let j = start; j < start + slice && j < ch.length; j += step) {
+      sum += ch[j] * ch[j]; cnt++;
+    }
+    out[i] = Math.sqrt(sum / (cnt || 1));
+    if (out[i] > max) max = out[i];
+  }
+  for (let i = 0; i < n; i++) out[i] = max ? Math.pow(out[i] / max, 0.75) : 0;
+  return out;
+}
+
+function baseHeights() {
+  const { n } = barLayout();
+  const hs = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const p = peaks
+      ? peaks[Math.min(peaks.length - 1, Math.floor(i / n * peaks.length))]
+      : envelope(i, n) * 0.55;
+    hs[i] = 5 + p * (canvas.height - 14);
+  }
+  return hs;
+}
+
+function drawFrame(heights) {
+  const { n, pitch, bw, mid } = barLayout();
+  const hs = heights || baseHeights();
+  const frac = isFinite(audio.duration) && audio.duration
+    ? audio.currentTime / audio.duration : 0;
+  const played = Math.floor(frac * n);
+  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < n; i++) {
+    const h = Math.max(3, hs[i]);
     const x = i * pitch, y = mid - h / 2;
+    ctx2d.fillStyle = i < played ? '#D97757' : '#3D3D3A';
     if (ctx2d.roundRect) {
       ctx2d.beginPath();
       ctx2d.roundRect(x, y, bw, h, 1);
@@ -502,37 +613,19 @@ function drawBars(heights) {
   }
 }
 
-function envelope(i, n) {
-  // Smooth center-weighted envelope, mirroring the hero SVG silhouette.
-  const t = i / (n - 1);
-  return Math.sin(Math.PI * t) ** 1.5;
-}
-
-function drawStatic() {
-  const { n, mid } = barLayout();
-  const hs = [];
-  for (let i = 0; i < n; i++) hs.push(6 + envelope(i, n) * (mid * 0.6));
-  drawBars(hs);
-}
-
 function startWave() {
-  if (!analyser || actx === 'failed') return;
-  const { n, mid } = barLayout();
-  const half = Math.ceil(n / 2);
   const render = () => {
-    analyser.getByteFrequencyData(freq);
-    const hs = new Array(n);
-    // Low frequencies at the center, mirrored outward, like the brand mark.
-    for (let j = 0; j < half; j++) {
-      const bin = Math.floor(j / half * freq.length * 0.7);
-      const v = freq[bin] / 255;
-      const h = 6 + v * (canvas.height - 12) * (0.35 + 0.65 * envelope(half - j, n));
-      const c = Math.floor(n / 2);
-      if (c + j < n) hs[c + j] = h;
-      if (c - j >= 0) hs[c - j] = h;
+    const base = baseHeights();
+    let target = 1;
+    if (analyser && actx !== 'failed') {
+      analyser.getByteFrequencyData(freq);
+      let bass = 0;
+      const nb = Math.max(4, freq.length >> 4);
+      for (let j = 0; j < nb; j++) bass += freq[j];
+      target = 0.72 + 0.42 * (bass / nb / 255);
     }
-    for (let i = 0; i < n; i++) if (hs[i] === undefined) hs[i] = 6;
-    drawBars(hs);
+    liveScale += (target - liveScale) * 0.16;
+    drawFrame(base.map(h => 3 + (h - 3) * liveScale));
     rafId = requestAnimationFrame(render);
   };
   cancelAnimationFrame(rafId);
@@ -541,16 +634,43 @@ function startWave() {
 
 function stopWave() {
   cancelAnimationFrame(rafId);
-  drawStatic();
+  liveScale = 1;
+  drawFrame();
 }
+
+function seekFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+  if (isFinite(audio.duration) && audio.duration) {
+    audio.currentTime = frac * audio.duration;
+    if (audio.paused) drawFrame();
+  }
+}
+canvas.addEventListener('pointerdown', e => {
+  seeking = true;
+  canvas.setPointerCapture(e.pointerId);
+  seekFromEvent(e);
+});
+canvas.addEventListener('pointermove', e => { if (seeking) seekFromEvent(e); });
+canvas.addEventListener('pointerup', () => { seeking = false; });
 
 /* ---------- actions ---------- */
 $('open-folder').onclick = () =>
   api('/api/open-folder', { method: 'POST' }).catch(e => showError(e.message));
 
+/* Similar: audio-sourced tracks (uploads, optimized copies, orphans) go
+   through cover mode with a strength choice; generated tracks re-use their
+   saved prompt. */
+const isAudioSource = t =>
+  t && (t.source === 'upload' || t.source === 'optimized' || t.orphan);
+
 $('similar').onclick = async () => {
   const t = state.current;
   if (!t) return;
+  if (isAudioSource(t)) {
+    $('similar-strength').classList.toggle('on');
+    return;
+  }
   $('prompt').value = t.caption || '';
   state.selected = new Set(t.genres || []);
   [...$('genre-pills').children].forEach(b =>
@@ -574,6 +694,138 @@ $('similar').onclick = async () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   } catch (e) { showError(e.message); }
 };
+
+for (const b of $('similar-strength').querySelectorAll('.pill[data-s]')) {
+  b.onclick = async () => {
+    const t = state.current;
+    if (!t) return;
+    $('similar-strength').classList.remove('on');
+    try {
+      await api('/api/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          task: 'cover',
+          src_file: t.file,
+          cover_strength: parseFloat(b.dataset.s),
+          quality: $('quality').value,
+          similar_to: t.id,
+        }),
+      });
+      startPolling();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) { showError(e.message); }
+  };
+}
+
+/* ---------- audit ---------- */
+$('audit').onclick = async () => {
+  const t = state.current;
+  if (!t) return;
+  const panel = $('audit-panel');
+  panel.classList.add('on');
+  panel.textContent = 'Analyzing...';
+  try {
+    const r = await api('/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ file: t.file }),
+    });
+    renderAudit(r.audit);
+  } catch (e) { panel.textContent = e.message; }
+};
+
+function renderAudit(a) {
+  const panel = $('audit-panel');
+  panel.textContent = '';
+  const m = a.measured || {};
+  const bits = [];
+  if (m.loudness_lufs !== undefined) bits.push(m.loudness_lufs.toFixed(1) + ' LUFS');
+  if (m.true_peak_dbtp !== undefined) bits.push(m.true_peak_dbtp.toFixed(1) + ' dBTP');
+  if (m.loudness_range_lu !== undefined) bits.push('LRA ' + m.loudness_range_lu.toFixed(1));
+  if (m.codec) bits.push(m.codec);
+  if (m.sample_rate_hz) bits.push((m.sample_rate_hz / 1000) + ' kHz');
+  if (m.channels) bits.push(m.channels === 1 ? 'mono' : m.channels === 2 ? 'stereo' : m.channels + ' ch');
+  if (m.duration_sec) bits.push(fmt(m.duration_sec));
+  const head = document.createElement('div');
+  head.className = 'mono';
+  head.style.color = 'var(--muted)';
+  head.textContent = bits.join(' · ');
+  panel.appendChild(head);
+  for (const f of a.findings || []) {
+    const line = document.createElement('div');
+    line.className = 'audit-line';
+    const lvl = document.createElement('span');
+    lvl.className = 'lvl' + (f.level === 'warn' ? ' lvl-warn' : '');
+    lvl.textContent = f.level === 'warn' ? 'fix' : f.level;
+    line.appendChild(lvl);
+    line.appendChild(document.createTextNode(f.text));
+    if (f.fix) {
+      const fx = document.createElement('span');
+      fx.className = 'audit-fix';
+      fx.textContent = ' ' + f.fix;
+      line.appendChild(fx);
+    }
+    panel.appendChild(line);
+  }
+}
+
+/* ---------- optimize ---------- */
+$('optimize').onclick = async () => {
+  const t = state.current;
+  if (!t) return;
+  const target = $('opt-target').value;
+  const btn = $('optimize');
+  btn.disabled = true;
+  btn.textContent = 'Optimizing...';
+  try {
+    const r = await api('/api/optimize', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ file: t.file, target }),
+    });
+    await refreshLibrary();
+    const nt = state.tracks.find(x => x.id === r.track.id);
+    if (nt) loadTrack(nt, false);
+  } catch (e) { showError(e.message); }
+  btn.disabled = false;
+  btn.textContent = 'Optimize';
+};
+
+/* ---------- drag and drop upload ---------- */
+let dragDepth = 0;
+document.addEventListener('dragenter', e => {
+  e.preventDefault();
+  if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) {
+    dragDepth++;
+    $('drop-overlay').classList.add('on');
+  }
+});
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('dragleave', () => {
+  if (--dragDepth <= 0) {
+    dragDepth = 0;
+    $('drop-overlay').classList.remove('on');
+  }
+});
+document.addEventListener('drop', async e => {
+  e.preventDefault();
+  dragDepth = 0;
+  $('drop-overlay').classList.remove('on');
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file) return;
+  showError('Uploading ' + file.name + '...');
+  try {
+    const r = await api('/api/upload?name=' + encodeURIComponent(file.name), {
+      method: 'POST',
+      body: file,
+    });
+    $('error-note').classList.remove('on');
+    await refreshLibrary();
+    const t = state.tracks.find(x => x.id === r.track.id);
+    if (t) loadTrack(t, false);
+  } catch (err) { showError(err.message); }
+});
 
 /* ---------- rating ---------- */
 function renderStars(rating) {
@@ -606,7 +858,8 @@ function fitCanvas() {
   const w = canvas.parentElement.clientWidth - 2;
   if (w > 0 && Math.abs(canvas.width - w) > 8) {
     canvas.width = w;
-    if (audio.paused) drawStatic();
+    if (state.current) loadPeaks(state.current);
+    if (audio.paused) drawFrame();
   }
 }
 window.addEventListener('resize', fitCanvas);

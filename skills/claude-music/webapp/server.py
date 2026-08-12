@@ -79,6 +79,154 @@ def merge_caption(user_text, tag_lists, limit=CAPTION_MAX):
     return ", ".join(parts)[:limit].rstrip(", ")
 
 
+UPLOAD_MAX_BYTES = 200 * 1024 * 1024
+SAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9._-]")
+
+# Loudness targets and codecs per platform, from references/post-processing.md.
+OPTIMIZE_TARGETS = {
+    "spotify": {"lufs": -14.0, "ext": ".flac",
+                "args": ["-ar", "44100", "-sample_fmt", "s16", "-c:a", "flac"]},
+    "apple": {"lufs": -16.0, "ext": ".flac",
+              "args": ["-ar", "44100", "-sample_fmt", "s16", "-c:a", "flac"]},
+    "youtube": {"lufs": -14.0, "ext": ".mp3",
+                "args": ["-c:a", "libmp3lame", "-b:a", "320k", "-ar", "48000"]},
+    "tiktok": {"lufs": -14.0, "ext": ".m4a",
+               "args": ["-c:a", "aac", "-b:a", "256k", "-ar", "44100"]},
+    "podcast": {"lufs": -16.0, "ext": ".mp3",
+                "args": ["-c:a", "libmp3lame", "-b:a", "192k", "-ac", "1"]},
+}
+
+
+def safe_upload_dest(output_dir, raw_name):
+    """Sanitized, collision-free destination for an uploaded file, or None.
+
+    Same whitelist as music_export.sh: basename only, [a-zA-Z0-9._-].
+    Never returns an existing path (appends -2, -3, ...).
+    """
+    name = SAFE_NAME_RE.sub("", Path(unquote(str(raw_name))).name)
+    stem, ext = os.path.splitext(name)
+    stem = stem.strip(".")
+    if not stem or ext.lower() not in AUDIO_EXTS:
+        return None
+    output_dir = Path(output_dir)
+    dest = output_dir / f"{stem}{ext.lower()}"
+    n = 2
+    while dest.exists():
+        dest = output_dir / f"{stem}-{n}{ext.lower()}"
+        n += 1
+    return dest
+
+
+def ffprobe_info(path):
+    """Container/stream info via ffprobe, or None when undecodable."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-print_format", "json",
+             "-show_format", "-show_streams", str(path)],
+            capture_output=True, text=True, timeout=30)
+        info = json.loads(out.stdout)
+        if not info.get("format") or not float(info["format"].get("duration", 0)):
+            return None
+        return info
+    except Exception:
+        return None
+
+
+def parse_loudnorm_json(text):
+    """Extract the loudnorm JSON block that ffmpeg prints on stderr."""
+    for m in reversed(list(re.finditer(r"\{[^{}]*\}", text or ""))):
+        try:
+            obj = json.loads(m.group(0))
+        except ValueError:
+            continue
+        if isinstance(obj, dict) and "input_i" in obj:
+            return obj
+    return None
+
+
+def measure_loudness(path):
+    """One loudnorm analysis pass. Returns the measured dict or None."""
+    try:
+        out = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-nostdin", "-i", str(path),
+             "-af", "loudnorm=I=-14:TP=-1:LRA=11:print_format=json",
+             "-f", "null", "-"],
+            capture_output=True, text=True, timeout=300)
+        return parse_loudnorm_json(out.stderr)
+    except Exception:
+        return None
+
+
+LOSSY_CODECS = {"mp3", "aac", "vorbis", "opus", "wmav2"}
+
+
+def build_audit(probe, loudnorm):
+    """Assemble an audit report from ffprobe + loudnorm measurements.
+
+    Pure function: no subprocesses, unit-testable. Streaming targets are
+    -14 LUFS / -1 dBTP (references/post-processing.md).
+    """
+    report = {"measured": {}, "findings": []}
+    fmt = (probe or {}).get("format") or {}
+    stream = next((s for s in (probe or {}).get("streams", [])
+                   if s.get("codec_type") == "audio"), {})
+    m = report["measured"]
+    if fmt.get("duration"):
+        m["duration_sec"] = round(float(fmt["duration"]), 1)
+    if fmt.get("bit_rate"):
+        m["bitrate_kbps"] = round(int(fmt["bit_rate"]) / 1000)
+    m["codec"] = stream.get("codec_name")
+    if stream.get("sample_rate"):
+        m["sample_rate_hz"] = int(stream["sample_rate"])
+    m["channels"] = stream.get("channels")
+
+    def flag(level, text, fix=None):
+        report["findings"].append({"level": level, "text": text, "fix": fix})
+
+    if loudnorm:
+        try:
+            lufs = float(loudnorm["input_i"])
+            tp = float(loudnorm["input_tp"])
+            lra = float(loudnorm["input_lra"])
+        except (KeyError, TypeError, ValueError):
+            lufs = tp = lra = None
+        if lufs is not None:
+            m["loudness_lufs"] = lufs
+            m["true_peak_dbtp"] = tp
+            m["loudness_range_lu"] = lra
+            if lufs < -17:
+                flag("warn", f"Quiet for streaming: {lufs:.1f} LUFS vs the "
+                     "-14 LUFS target. Platforms will not turn it up.",
+                     "Run Optimize to normalize loudness.")
+            elif lufs > -11:
+                flag("warn", f"Loud: {lufs:.1f} LUFS. Streaming platforms "
+                     "will turn it down and it may sound squashed.",
+                     "Run Optimize to normalize loudness.")
+            else:
+                flag("ok", f"Loudness {lufs:.1f} LUFS sits well for "
+                     "streaming (-14 LUFS target).")
+            if tp is not None and tp > -1.0:
+                flag("warn", f"True peak {tp:.2f} dBTP exceeds -1 dBTP: "
+                     "clipping risk after lossy encoding.",
+                     "Run Optimize; it enforces a -1 dBTP ceiling.")
+            if lra is not None and lra < 3:
+                flag("info", f"Loudness range {lra:.1f} LU is very narrow; "
+                     "the track has little dynamic movement.")
+    else:
+        flag("info", "Loudness could not be measured.")
+
+    if m.get("channels") == 1:
+        flag("info", "Mono audio. Fine for podcasts, unusual for music.")
+    if m.get("sample_rate_hz") and m["sample_rate_hz"] < 44100:
+        flag("warn", f"Sample rate {m['sample_rate_hz']} Hz is below the "
+             "44.1 kHz release standard.")
+    if m.get("codec") in LOSSY_CODECS:
+        flag("info", f"Lossy source ({m['codec']}). Re-encoding loses a "
+             "little more quality each time; keep a lossless master if "
+             "you have one.")
+    return report
+
+
 def suggest_fix(error_msg):
     """Map common engine failures to a plain-language suggestion."""
     msg = (error_msg or "").lower()
@@ -316,8 +464,19 @@ class JobRunner:
                "--output-dir", out_dir]
         if request.get("seed") is not None:
             cmd += ["--seed", str(int(request["seed"]))]
-        cmd += ["generate", "--caption", request["caption"],
-                "--duration", str(float(request.get("duration") or 60))]
+        if request.get("task") == "cover":
+            # Covers default to one variant: kinder to VRAM, and variant
+            # exploration matters less when following a source.
+            cmd += ["--batch", str(int(request.get("batch") or 1))]
+            cmd += ["cover", "--src-audio", request["src_path"],
+                    "--cover-strength", str(request.get("cover_strength", 0.5))]
+            if request.get("caption"):
+                cmd += ["--caption", request["caption"]]
+            if request.get("duration"):
+                cmd += ["--duration", str(float(request["duration"]))]
+        else:
+            cmd += ["generate", "--caption", request["caption"],
+                    "--duration", str(float(request.get("duration") or 60))]
         if request.get("lyrics"):
             cmd += ["--lyrics", request["lyrics"]]
         if request.get("instrumental"):
@@ -333,7 +492,8 @@ class JobRunner:
             cmd, quality, out_dir = self._build_cmd(request, cfg)
             env = dict(os.environ,
                        TOKENIZERS_PARALLELISM="false",
-                       TORCHAUDIO_USE_BACKEND="ffmpeg")
+                       TORCHAUDIO_USE_BACKEND="ffmpeg",
+                       PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True")
             proc = subprocess.Popen(
                 cmd, cwd=os.path.expanduser(cfg["ace_step_dir"]),
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -387,12 +547,13 @@ class JobRunner:
                 p = Path(out.get("path", ""))
                 if not p.name:
                     continue
+                result_caption = (result.get("params") or {}).get("caption")
                 entry = {
                     "id": p.stem,
                     "file": p.name,
                     "created": datetime.now().isoformat(timespec="seconds"),
-                    "task": "generate",
-                    "caption": request["caption"],
+                    "task": request.get("task") or "generate",
+                    "caption": request["caption"] or result_caption or None,
                     "lyrics": request.get("lyrics"),
                     "instrumental": bool(request.get("instrumental")),
                     "bpm": request.get("bpm"),
@@ -406,6 +567,9 @@ class JobRunner:
                 }
                 if request.get("similar_to"):
                     entry["similar_to"] = request["similar_to"]
+                if request.get("task") == "cover":
+                    entry["cover_strength"] = request.get("cover_strength")
+                    entry["cover_of"] = request.get("src_file")
                 meta_store.write(entry)
             self._set(status="done", pct=1.0, result=result)
         except Exception as e:
@@ -419,25 +583,44 @@ def validate_generate_request(body):
     """Returns (request, None) or (None, error string)."""
     if not isinstance(body, dict):
         return None, "Body must be a JSON object"
+    task = body.get("task") or "generate"
+    if task not in ("generate", "cover"):
+        return None, "task must be generate or cover"
     caption = str(body.get("caption") or "").strip()
-    if not caption:
+    if not caption and task == "generate":
         return None, "caption is required"
     if len(caption) > CAPTION_MAX:
         return None, f"caption exceeds {CAPTION_MAX} characters"
-    req = {"caption": caption}
+    req = {"caption": caption, "task": task}
+    if task == "cover":
+        src = Path(str(body.get("src_file") or "")).name
+        if not src:
+            return None, "src_file is required for cover"
+        req["src_file"] = src
+        strength = body.get("cover_strength", 0.5)
+        try:
+            strength = float(strength)
+        except (TypeError, ValueError):
+            return None, "cover_strength must be a number"
+        if not 0.0 <= strength <= 1.0:
+            return None, "cover_strength must be between 0.0 and 1.0"
+        req["cover_strength"] = strength
     lyrics = body.get("lyrics")
     if lyrics:
         lyrics = str(lyrics)
         if len(lyrics) > LYRICS_MAX:
             return None, f"lyrics exceed {LYRICS_MAX} characters"
         req["lyrics"] = lyrics
-    try:
-        duration = float(body.get("duration") or 60)
-    except (TypeError, ValueError):
-        return None, "duration must be a number"
-    if not 10 <= duration <= 600:
-        return None, "duration must be between 10 and 600 seconds"
-    req["duration"] = duration
+    if task == "cover" and not body.get("duration"):
+        pass  # cover defaults to the source length (engine duration -1)
+    else:
+        try:
+            duration = float(body.get("duration") or 60)
+        except (TypeError, ValueError):
+            return None, "duration must be a number"
+        if not 10 <= duration <= 600:
+            return None, "duration must be between 10 and 600 seconds"
+        req["duration"] = duration
     bpm = body.get("bpm")
     if bpm is not None and bpm != "":
         try:
@@ -589,6 +772,142 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 remaining -= len(chunk)
 
+    # -- upload / analyze / optimize --------------------------------------
+    def _handle_upload(self):
+        from urllib.parse import parse_qs
+        query = parse_qs(urlparse(self.path).query)
+        raw_name = (query.get("name") or [""])[0]
+        out_dir = self._output_dir()
+        dest = safe_upload_dest(out_dir, raw_name)
+        if dest is None:
+            exts = ", ".join(sorted(AUDIO_EXTS))
+            self._json({"error": f"Unsupported file. Use one of: {exts}"}, 400)
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0:
+            self._json({"error": "Empty upload"}, 400)
+            return
+        if length > UPLOAD_MAX_BYTES:
+            self._json({"error": "File exceeds the 200 MB upload limit"}, 413)
+            return
+        out_dir.mkdir(parents=True, exist_ok=True)
+        remaining = length
+        try:
+            with dest.open("wb") as f:
+                while remaining > 0:
+                    chunk = self.rfile.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    remaining -= len(chunk)
+        except Exception as e:
+            dest.unlink(missing_ok=True)
+            self._json({"error": f"Upload failed: {e}"}, 500)
+            return
+        if remaining > 0:
+            dest.unlink(missing_ok=True)
+            self._json({"error": "Upload was cut short, try again"}, 400)
+            return
+        probe = ffprobe_info(dest)
+        if probe is None:
+            dest.unlink(missing_ok=True)
+            self._json({"error": "That file does not decode as audio"}, 400)
+            return
+        entry = {
+            "id": dest.stem,
+            "file": dest.name,
+            "created": datetime.now().isoformat(timespec="seconds"),
+            "source": "upload",
+            "caption": None,
+            "duration": round(float(probe["format"]["duration"]), 1),
+            "rating": None,
+        }
+        self.meta_store.write(entry)
+        self._json({"ok": True, "track": entry})
+
+    def _track_and_path(self, body):
+        """Resolve {file} from a POST body to (entry_or_None, path_or_None)."""
+        raw = (body or {}).get("file") or ""
+        path = safe_audio_path(self._output_dir(), raw)
+        if path is None:
+            return None, None
+        return self.meta_store.read(path.stem), path
+
+    def _handle_analyze(self):
+        body = self._read_body() or {}
+        entry, path = self._track_and_path(body)
+        if path is None:
+            self._json({"error": "track not found"}, 404)
+            return
+        if entry and entry.get("audit") and not body.get("refresh"):
+            self._json({"ok": True, "audit": entry["audit"], "cached": True})
+            return
+        probe = ffprobe_info(path)
+        if probe is None:
+            self._json({"error": "ffprobe could not read this file"}, 500)
+            return
+        audit = build_audit(probe, measure_loudness(path))
+        entry = entry or {"id": path.stem, "file": path.name, "caption": None,
+                          "rating": None, "orphan": True,
+                          "created": datetime.now().isoformat(timespec="seconds")}
+        entry["audit"] = audit
+        self.meta_store.write(entry)
+        self._json({"ok": True, "audit": audit})
+
+    def _handle_optimize(self):
+        body = self._read_body() or {}
+        entry, path = self._track_and_path(body)
+        if path is None:
+            self._json({"error": "track not found"}, 404)
+            return
+        target = body.get("target") or "spotify"
+        spec = OPTIMIZE_TARGETS.get(target)
+        if spec is None:
+            self._json({"error": f"target must be one of: "
+                        f"{', '.join(sorted(OPTIMIZE_TARGETS))}"}, 400)
+            return
+        measured = measure_loudness(path)
+        if measured is None:
+            self._json({"error": "Loudness measurement failed "
+                        "(is ffmpeg installed?)"}, 500)
+            return
+        dest = safe_upload_dest(self._output_dir(),
+                                f"{path.stem}_{target}{spec['ext']}")
+        loudnorm = (
+            f"loudnorm=I={spec['lufs']}:TP=-1:LRA=11:"
+            f"measured_I={measured['input_i']}:"
+            f"measured_TP={measured['input_tp']}:"
+            f"measured_LRA={measured['input_lra']}:"
+            f"measured_thresh={measured['input_thresh']}:"
+            f"offset={measured.get('target_offset', 0)}:linear=true")
+        try:
+            run = subprocess.run(
+                ["ffmpeg", "-hide_banner", "-nostdin", "-n", "-i", str(path),
+                 "-af", loudnorm] + spec["args"] + [str(dest)],
+                capture_output=True, text=True, timeout=600)
+        except subprocess.TimeoutExpired:
+            self._json({"error": "Optimization timed out"}, 500)
+            return
+        if run.returncode != 0 or not dest.is_file():
+            tail = (run.stderr or "").strip()[-200:]
+            self._json({"error": f"ffmpeg failed: {tail}"}, 500)
+            return
+        new_entry = {
+            "id": dest.stem,
+            "file": dest.name,
+            "created": datetime.now().isoformat(timespec="seconds"),
+            "source": "optimized",
+            "optimized_from": path.stem,
+            "target": target,
+            "caption": (entry or {}).get("caption"),
+            "rating": None,
+        }
+        self.meta_store.write(new_entry)
+        self._json({"ok": True, "track": new_entry})
+
     # -- POST ------------------------------------------------------------
     def do_POST(self):
         path = urlparse(self.path).path
@@ -599,6 +918,12 @@ class Handler(BaseHTTPRequestHandler):
                 if err:
                     self._json({"error": err}, 400)
                     return
+                if req.get("task") == "cover":
+                    src = safe_audio_path(self._output_dir(), req["src_file"])
+                    if src is None:
+                        self._json({"error": "source track not found"}, 404)
+                        return
+                    req["src_path"] = str(src)
                 start_err = self.runner.start(req, self.meta_store)
                 if start_err == "busy":
                     self._json({"error": "A generation is already running"}, 409)
@@ -628,6 +953,12 @@ class Handler(BaseHTTPRequestHandler):
                              or datetime.now().isoformat(timespec="seconds")}
                     self.meta_store.write(entry)
                 self._json({"ok": True, "track": entry})
+            elif path == "/api/upload":
+                self._handle_upload()
+            elif path == "/api/analyze":
+                self._handle_analyze()
+            elif path == "/api/optimize":
+                self._handle_optimize()
             elif path == "/api/open-folder":
                 folder = str(self._output_dir())
                 opener = {"linux": "xdg-open", "darwin": "open",

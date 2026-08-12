@@ -41,6 +41,13 @@ bash ~/.claude/skills/claude-music/scripts/music_web.sh 9000
   in `<output_dir>/.claude-music/meta/` sidecars.
 - Download, open the output folder, and generate a similar track (same
   prompt/settings, fresh seed).
+- Drag and drop your own audio file onto the page to add it to the library,
+  then: Audit (ffprobe + loudnorm report with fix suggestions), Optimize
+  (two-pass loudness normalization for Spotify/Apple/YouTube/TikTok/podcast),
+  or Similar (cover-mode generation from the audio with a Loose/Balanced/
+  Faithful strength choice).
+- The player waveform is the real silhouette of the track; click it to seek,
+  and the played portion fills in brand orange.
 
 ## Notes
 

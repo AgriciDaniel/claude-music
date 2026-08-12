@@ -198,6 +198,116 @@ def test_validate_sanitizes_similar_to(server_module):
 
 
 # ---------------------------------------------------------------------------
+# (g2) Upload destination sanitization
+# ---------------------------------------------------------------------------
+
+def test_safe_upload_dest_sanitizes_and_collides(server_module, tmp_path):
+    f = server_module.safe_upload_dest
+    dest = f(tmp_path, "My Song (final).FLAC")
+    assert dest == tmp_path / "MySongfinal.flac"
+    assert f(tmp_path, "../../etc/evil.flac") == tmp_path / "evil.flac"
+    assert f(tmp_path, "notes.txt") is None
+    assert f(tmp_path, ".flac") is None
+    assert f(tmp_path, "") is None
+    (tmp_path / "song.mp3").write_bytes(b"x")
+    assert f(tmp_path, "song.mp3") == tmp_path / "song-2.mp3"
+
+
+# ---------------------------------------------------------------------------
+# (g3) Loudnorm parsing + audit report
+# ---------------------------------------------------------------------------
+
+LOUDNORM_STDERR = """\
+[Parsed_loudnorm_0 @ 0x5642] Some noise
+{
+\t"input_i" : "-19.20",
+\t"input_tp" : "-2.10",
+\t"input_lra" : "6.40",
+\t"input_thresh" : "-29.50",
+\t"output_i" : "-14.10",
+\t"target_offset" : "0.30"
+}
+"""
+
+
+def test_parse_loudnorm_json(server_module):
+    got = server_module.parse_loudnorm_json(LOUDNORM_STDERR)
+    assert got["input_i"] == "-19.20"
+    assert server_module.parse_loudnorm_json("no json here") is None
+    assert server_module.parse_loudnorm_json('{"other": 1}') is None
+    assert server_module.parse_loudnorm_json(None) is None
+
+
+def _probe(sr=48000, ch=2, codec="flac"):
+    return {"format": {"duration": "30.0", "bit_rate": "900000"},
+            "streams": [{"codec_type": "audio", "codec_name": codec,
+                         "sample_rate": str(sr), "channels": ch}]}
+
+
+def test_build_audit_flags_quiet_and_ok(server_module):
+    audit = server_module.build_audit(
+        _probe(), {"input_i": "-19.2", "input_tp": "-2.1", "input_lra": "6.4"})
+    assert audit["measured"]["loudness_lufs"] == -19.2
+    assert any(f["level"] == "warn" and "Quiet" in f["text"]
+               for f in audit["findings"])
+    ok = server_module.build_audit(
+        _probe(), {"input_i": "-13.8", "input_tp": "-1.4", "input_lra": "6.0"})
+    assert any(f["level"] == "ok" for f in ok["findings"])
+
+
+def test_build_audit_flags_clipping_mono_lossy(server_module):
+    audit = server_module.build_audit(
+        _probe(sr=22050, ch=1, codec="mp3"),
+        {"input_i": "-9.0", "input_tp": "-0.2", "input_lra": "2.0"})
+    texts = " ".join(f["text"] for f in audit["findings"])
+    assert "clipping" in texts.lower()
+    assert "Mono" in texts
+    assert "22050" in texts
+    assert "Lossy" in texts
+    assert any("Loud" in f["text"] for f in audit["findings"])
+
+
+# ---------------------------------------------------------------------------
+# (g4) Cover task
+# ---------------------------------------------------------------------------
+
+def test_validate_cover_request(server_module):
+    v = server_module.validate_generate_request
+    req, err = v({"task": "cover", "src_file": "song.flac",
+                  "cover_strength": 0.3})
+    assert err is None
+    assert req["task"] == "cover" and req["src_file"] == "song.flac"
+    assert "duration" not in req  # follows the source by default
+
+    assert v({"task": "cover"})[1] is not None                 # no src
+    assert v({"task": "cover", "src_file": "s.flac",
+              "cover_strength": 1.5})[1] is not None           # out of range
+    assert v({"task": "cover", "src_file": "s.flac",
+              "cover_strength": "x"})[1] is not None
+    assert v({"task": "weird", "caption": "x"})[1] is not None
+    req, _ = v({"task": "cover", "src_file": "../../etc/passwd",
+                "cover_strength": 0.5})
+    assert req["src_file"] == "passwd"
+
+
+def test_build_cmd_cover_branch(server_module, tmp_path):
+    runner = server_module.JobRunner(lambda: {})
+    cfg = {"ace_step_dir": str(tmp_path), "defaults": {"quality": "high"},
+           "output_dir": str(tmp_path)}
+    req = {"task": "cover", "src_path": str(tmp_path / "song.flac"),
+           "cover_strength": 0.7, "caption": ""}
+    cmd, quality, _ = runner._build_cmd(req, cfg)
+    assert "cover" in cmd
+    i = cmd.index("cover")
+    assert cmd[i + 1] == "--src-audio"
+    assert "--cover-strength" in cmd
+    assert cmd[cmd.index("--cover-strength") + 1] == "0.7"
+    assert "--caption" not in cmd    # empty caption: LM fills it in
+    assert "--duration" not in cmd   # -1 default: follow source
+    assert "generate" not in cmd
+
+
+# ---------------------------------------------------------------------------
 # (h) Security guards (textual, same style as test_no_eval_in_scripts)
 # ---------------------------------------------------------------------------
 
@@ -261,6 +371,30 @@ def test_live_server_smoke(server_module, tmp_path, monkeypatch):
         with pytest.raises(urllib.error.HTTPError) as exc:
             urllib.request.urlopen(req, timeout=5)
         assert exc.value.code == 503
+
+        # Upload a real (tiny) WAV; requires ffprobe for validation.
+        import shutil
+        if shutil.which("ffprobe"):
+            import io
+            import struct
+            import wave as wav_mod
+            bio = io.BytesIO()
+            with wav_mod.open(bio, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(8000)
+                w.writeframes(struct.pack("<h", 0) * 8000)
+            data = bio.getvalue()
+            up = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/upload?name=my%20demo.wav",
+                data=data, method="POST")
+            with urllib.request.urlopen(up, timeout=10) as r:
+                body = json.loads(r.read())
+            assert body["track"]["source"] == "upload"
+            assert (tmp_path / body["track"]["file"]).is_file()
+            status, lib = get("/api/library")
+            tracks = json.loads(lib)["tracks"]
+            assert any(t.get("source") == "upload" for t in tracks)
     finally:
         httpd.shutdown()
         httpd.server_close()

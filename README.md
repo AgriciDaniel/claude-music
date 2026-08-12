@@ -187,9 +187,13 @@ bash ~/.claude/skills/claude-music/scripts/music_web.sh
 
 - One generate box with multi-select style buttons (28 genres) and presets
 - Live progress percentage while the model runs
-- Built-in player with waveform bars that move with the music
+- Built-in player with the track's real waveform: click to seek, played
+  portion fills in orange, bars move with the beat
 - Library backed by your output folder, with 1-5 star ratings
 - Download a track, open its folder, or generate a similar one in one click
+- Drag and drop your own songs to audit them (loudness, true peak, format,
+  with fix suggestions), optimize them for streaming platforms, or generate
+  similar tracks from the audio itself
 
 Everything runs on `127.0.0.1` with the Python standard library only: no extra
 dependencies, no cloud calls.
@@ -231,6 +235,7 @@ No cloud API. No subscription. Everything runs on your machine.
 | First generation is slow | Model checkpoints load into VRAM on first run (~10-30 s extra). Later runs are faster. |
 | Generation timed out (15 min) | Usually a first-run model download or a `max`-quality run on a slow GPU. Try again or drop to `high`. |
 | FLAC will not play in the dashboard | Chrome and Firefox play FLAC natively; some Safari versions do not. Set `"format": "mp3"` in `config.json` defaults, or use the Download button. |
+| Uploaded file rejected | The dashboard accepts flac, wav, mp3, opus, aac, m4a and ogg up to 200 MB, and verifies the file decodes with ffprobe. Convert exotic formats first: `ffmpeg -i input.xyz output.flac`. |
 
 ## Uninstall
 
