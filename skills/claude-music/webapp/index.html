@@ -109,6 +109,12 @@
   }
   .btn:hover { border-color: var(--muted); background: rgba(245, 244, 237, 0.04); }
   .btn:active { transform: translateY(1px); }
+  .btn-icon {
+    padding: 8px 11px; line-height: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  #play { color: var(--brand); border-color: var(--brand); }
+  #play:hover { background: var(--brand-soft); }
   .btn-primary {
     background: var(--brand); border: 1px solid var(--brand);
     color: #1E1D1B; font-weight: 700; margin-left: auto;
@@ -246,7 +252,10 @@
     <div class="bar-track" id="seek-track" style="cursor:pointer; margin-bottom:12px;"><div class="bar-fill" id="seek-fill"></div></div>
     <audio id="audio"></audio>
     <div class="player-controls">
-      <button class="btn" id="play">Play</button>
+      <button class="btn btn-icon" id="play" title="Play / pause"></button>
+      <button class="btn btn-icon" id="stop" title="Stop">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+      </button>
       <span class="time mono" id="time">0:00 / 0:00</span>
       <a class="btn" id="download" download>Download</a>
       <button class="btn" id="open-folder">Open folder</button>
@@ -338,6 +347,8 @@ async function init() {
     state.presets = g.presets || [];
     renderPills();
     await refreshLibrary();
+    // Open the newest track in the player by default (without autoplay).
+    if (!state.current && state.tracks.length) loadTrack(state.tracks[0], false);
   } catch (e) { showError(e.message); }
 }
 
@@ -589,10 +600,18 @@ function playPause(forcePlay) {
   if (audio.paused || forcePlay) audio.play(); else audio.pause();
 }
 
+const PLAY_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+const PAUSE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7V5zm6 0h4v14h-4V5z"/></svg>';
+$('play').innerHTML = PLAY_ICON;
 $('play').onclick = () => playPause(false);
-audio.onplay = () => { $('play').textContent = 'Pause'; startWave(); };
-audio.onpause = () => { $('play').textContent = 'Play'; stopWave(); };
-audio.onended = () => { $('play').textContent = 'Play'; stopWave(); };
+$('stop').onclick = () => {
+  audio.pause();
+  audio.currentTime = 0;
+  drawFrame();
+};
+audio.onplay = () => { $('play').innerHTML = PAUSE_ICON; startWave(); };
+audio.onpause = () => { $('play').innerHTML = PLAY_ICON; stopWave(); };
+audio.onended = () => { $('play').innerHTML = PLAY_ICON; stopWave(); };
 audio.ontimeupdate = () => {
   $('time').textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
   const frac = isFinite(audio.duration) && audio.duration
@@ -677,7 +696,8 @@ function drawFrame(heights) {
   for (let i = 0; i < n; i++) {
     const h = Math.max(3, hs[i]);
     const x = i * pitch, y = mid - h / 2;
-    ctx2d.fillStyle = i < played ? '#D97757' : '#3D3D3A';
+    ctx2d.fillStyle = i === played ? '#F5F4ED'
+      : i < played ? '#D97757' : '#3D3D3A';
     if (ctx2d.roundRect) {
       ctx2d.beginPath();
       ctx2d.roundRect(x, y, bw, h, 1);
@@ -686,11 +706,11 @@ function drawFrame(heights) {
   }
 }
 
-/* Live "wave" visualizer, ported from the music-visualizer component the
-   owner supplied: bottom-anchored bars, extreme contrast leveling so quiet
-   bars vanish and peaks explode, a synthetic traveling wave layered on the
-   real spectrum, double neighbor smoothing, spring easing, slow fade-out. */
-let waveH = null, waveV = null, waveA = null;
+/* Live animation: the canvas stays a true timeline (progress + seek always
+   match the song position). While playing, each bar's height breathes
+   around its real peak with the spectrum energy, spring-eased per frame,
+   so the waveform dances without ever losing its meaning. */
+let waveH = null, waveV = null;
 
 function smoothArr(a) {
   const out = a.slice();
@@ -700,82 +720,37 @@ function smoothArr(a) {
   return out;
 }
 
-function olaTargets(n) {
-  const t = new Array(n).fill(0.01);
-  if (!analyser || actx === 'failed') return t;
+function barLevels(n) {
+  const levels = new Array(n).fill(0);
+  if (!analyser || actx === 'failed') return levels;
   analyser.getByteFrequencyData(freq);
-  const useful = Math.floor(freq.length * 0.3);
-  let total = 0;
-  for (let i = 0; i < useful; i++) total += freq[i];
-  const avg = total / useful;
-  const half = n / 2;
-  const now = performance.now();
+  const useful = Math.floor(freq.length * 0.5);
   for (let i = 0; i < n; i++) {
-    let base;
-    if (i < half) {
-      base = (freq[Math.floor(i / half * useful)] || 0)
-        * (0.8 + Math.sin(now * 0.006 + i * 0.12) * 0.25
-           + Math.cos(now * 0.009 + i * 0.12) * 0.15);
-    } else {
-      const mirror = n - 1 - i;
-      base = (freq[Math.floor(mirror / half * useful)] || 0)
-        * (0.7 + Math.sin(now * 0.008 + i * 0.15) * 0.3
-           + Math.cos(now * 0.0096 + i * 0.15) * 0.2);
-    }
-    if (avg < 50) continue;
-    let v = base / 255;
-    v *= i < n * 0.25 ? 1.5 : i < n * 0.5 ? 1.2 : i < n * 0.75 ? 1.05 : 0.9;
-    v = Math.pow(Math.max(0, v), 0.4);
-    if (v > 0.8) v = Math.pow(v, 0.15) * 1.8;
-    else if (v > 0.7) v = Math.pow(v, 0.3) * 0.9;
-    else if (v > 0.5) v = Math.pow(v, 0.8) * 0.1;
-    else v = 0.01;
-    if (v < 0.45) v = 0.01;
-    t[i] = Math.max(0, Math.min(1.2, v));
+    levels[i] = (freq[Math.floor(i / n * useful)] || 0) / 255;
   }
-  return smoothArr(smoothArr(t));
-}
-
-function drawOla() {
-  const { n, pitch, bw } = barLayout();
-  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
-  ctx2d.fillStyle = '#D97757';
-  const H = canvas.height;
-  for (let i = 0; i < n; i++) {
-    const h = Math.min(H, Math.max(0, waveH[i]));
-    if (h < 1 || waveA[i] < 0.02) continue;
-    ctx2d.globalAlpha = Math.min(1, waveA[i]);
-    const x = i * pitch, y = H - h;
-    if (ctx2d.roundRect) {
-      ctx2d.beginPath();
-      ctx2d.roundRect(x, y, bw, h, 1);
-      ctx2d.fill();
-    } else ctx2d.fillRect(x, y, bw, h);
-  }
-  ctx2d.globalAlpha = 1;
+  return smoothArr(smoothArr(levels));
 }
 
 function startWave() {
   const { n } = barLayout();
   if (!waveH || waveH.length !== n) {
-    waveH = new Array(n).fill(0);
+    waveH = baseHeights();
     waveV = new Array(n).fill(0);
-    waveA = new Array(n).fill(0);
   }
-  const scale = (canvas.height - 4) / 1.2;
   const render = () => {
-    const targets = olaTargets(n);
-    for (let i = 0; i < n; i++) {
-      const on = targets[i] > 0.02;
-      const target = on ? targets[i] * scale : 0;
-      // Spring toward the target: snappy rise, softer settle.
-      waveV[i] += (target - waveH[i]) * (on ? 0.2 : 0.08);
-      waveV[i] *= 0.7;
-      waveH[i] += waveV[i];
-      // Opacity: appear fast, melt away slowly.
-      waveA[i] += ((on ? 1 : 0) - waveA[i]) * (on ? 0.5 : 0.06);
+    const base = baseHeights();
+    if (waveH.length !== base.length) {
+      waveH = base.slice();
+      waveV = new Array(base.length).fill(0);
     }
-    drawOla();
+    const levels = barLevels(base.length);
+    for (let i = 0; i < base.length; i++) {
+      const target = Math.max(3, base[i] * (0.45 + 0.75 * levels[i]));
+      waveV[i] += (target - waveH[i]) * 0.16;
+      waveV[i] *= 0.68;
+      waveH[i] += waveV[i];
+    }
+    drawFrame(waveH);
     rafId = requestAnimationFrame(render);
   };
   cancelAnimationFrame(rafId);
@@ -784,7 +759,7 @@ function startWave() {
 
 function stopWave() {
   cancelAnimationFrame(rafId);
-  waveH = waveV = waveA = null;
+  waveH = waveV = null;
   drawFrame();
 }
 
