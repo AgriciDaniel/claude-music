@@ -592,6 +592,8 @@ class JobRunner:
             cmd += ["--bpm", str(int(request["bpm"]))]
         if request.get("key"):
             cmd += ["--key=" + str(request["key"])]
+        if request.get("language"):
+            cmd += ["--language", request["language"]]
         return cmd, quality, out_dir
 
     def _attempt(self, request, cfg):
@@ -782,6 +784,11 @@ def validate_generate_request(body):
         if quality not in ("draft", "standard", "high", "max"):
             return None, "quality must be draft, standard, high or max"
         req["quality"] = quality
+    language = body.get("language")
+    if language:
+        if not re.match(r"^[a-z]{2,5}$", str(language)):
+            return None, "language must be a short code like en, es, ja"
+        req["language"] = str(language)
     req["instrumental"] = bool(body.get("instrumental"))
     genres = body.get("genres")
     if isinstance(genres, list):
