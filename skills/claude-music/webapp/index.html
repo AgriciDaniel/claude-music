@@ -687,16 +687,6 @@ async function refreshLibrary() {
     stars.className = 'track-stars';
     stars.textContent = t.rating ? '★'.repeat(t.rating) : '';
     row.append(thumb, title, stars, meta);
-    const badge = t.source === 'upload' ? 'upload'
-      : t.source === 'optimized' ? (t.target || 'optimized')
-      : t.task === 'cover' ? 'cover'
-      : t.quality;
-    if (badge) {
-      const q = document.createElement('span');
-      q.className = 'quality-pill';
-      q.textContent = badge;
-      row.appendChild(q);
-    }
     row.onclick = () => loadTrack(t, true);
     el.appendChild(row);
   }
