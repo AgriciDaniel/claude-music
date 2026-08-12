@@ -219,17 +219,21 @@ def test_config_defaults_shape(config_json):
     )
 
 
-def test_config_defaults_are_honoured_by_parser(engine_module, config_json):
+def test_config_defaults_are_honoured_by_parser(engine_module):
     """Regression: the defaults block must reach argparse.
 
     Before this was wired, --quality hardcoded default="standard" and every
     key in config.defaults was dead config that looked authoritative.
+    Compares against what the engine itself loads, so it holds both on dev
+    machines (real config.json) and in CI (no config.json, built-in
+    fallbacks).
     """
+    defaults = engine_module.load_config().get("defaults") or {}
     parser = engine_module.build_parser()
     args = parser.parse_args(["generate", "-c", "x"])
-    assert args.quality == config_json["defaults"]["quality"]
-    assert args.format == config_json["defaults"]["format"]
-    assert args.language == config_json["defaults"]["language"]
+    assert args.quality == (defaults.get("quality") or "standard")
+    assert args.format == (defaults.get("format") or "flac")
+    assert args.language == (defaults.get("language") or "en")
 
 
 def test_quality_preset_survives_explicit_flag(engine_module):
