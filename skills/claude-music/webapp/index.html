@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Music</title>
+<style>
+  :root {
+    --bg: #262624;
+    --fg: #F5F4ED;
+    --brand: #D97757;
+    --muted: #9C9A92;
+    --line: #3D3D3A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 40px 20px 80px;
+  }
+  .mono { font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; }
+  .wrap { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  .eyebrow {
+    font-weight: 700; font-size: 11px; letter-spacing: 1.8px;
+    text-transform: uppercase; color: var(--muted);
+  }
+  header { display: flex; align-items: center; justify-content: space-between; }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); display: inline-block;
+  }
+  .status-dot.busy { background: var(--brand); }
+  .card { border: 1px solid var(--line); border-radius: 4px; padding: 20px; }
+  .card h2 { font-weight: 700; font-size: 22px; letter-spacing: -0.4px; margin-bottom: 14px; }
+  textarea {
+    width: 100%; min-height: 64px; resize: vertical;
+    background: transparent; color: var(--fg);
+    border: 1px solid var(--line); border-radius: 4px;
+    padding: 10px 12px; font: inherit;
+  }
+  textarea:focus, select:focus { outline: none; border-color: var(--muted); }
+  .section-label { margin: 16px 0 8px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pill {
+    height: 22px; padding: 0 12px; border-radius: 11px;
+    border: 1px solid var(--muted); background: transparent;
+    color: var(--fg); font-size: 12px; cursor: pointer;
+    display: inline-flex; align-items: center;
+  }
+  .pill.active { border: 1.6px solid var(--brand); color: var(--brand); padding: 0 11px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
+  select {
+    background: var(--bg); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 4px;
+    padding: 6px 10px; font: inherit; font-size: 13px;
+  }
+  .field { display: flex; align-items: center; gap: 8px; }
+  .field label { font-size: 13px; color: var(--muted); }
+  .btn {
+    border: 1px solid var(--line); border-radius: 4px;
+    background: transparent; color: var(--fg);
+    padding: 8px 16px; font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn-primary {
+    background: var(--brand); border-color: var(--brand);
+    color: var(--bg); font-weight: 700; margin-left: auto;
+  }
+  .btn-primary:disabled { opacity: 0.5; cursor: default; }
+  #progress-row { display: none; margin-top: 16px; }
+  #progress-row.on { display: block; }
+  .bar-track { height: 2px; background: var(--line); border-radius: 1px; }
+  .bar-fill { height: 2px; width: 0%; background: var(--brand); border-radius: 1px; transition: width 0.4s linear; }
+  .progress-meta { display: flex; justify-content: space-between; margin-top: 6px; color: var(--muted); }
+  #player-card { display: none; }
+  #player-card.on { display: block; }
+  #wave { width: 100%; height: 120px; display: block; margin: 12px 0; }
+  .player-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .time { color: var(--muted); }
+  .stars { display: inline-flex; gap: 2px; margin-left: auto; }
+  .star { cursor: pointer; color: var(--line); font-size: 17px; background: none; border: none; padding: 0 1px; }
+  .star.on { color: var(--brand); }
+  .track {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer;
+  }
+  .track:last-child { border-bottom: none; }
+  .track:hover { background: rgba(245, 244, 237, 0.03); }
+  .track.playing .track-title { color: var(--brand); }
+  .track-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .quality-pill {
+    height: 18px; padding: 0 8px; border-radius: 9px;
+    border: 1px solid var(--line); color: var(--muted);
+    font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    display: inline-flex; align-items: center;
+  }
+  .track-stars { color: var(--brand); font-size: 12px; letter-spacing: 1px; }
+  #setup-note, #error-note {
+    display: none; border: 1px solid var(--brand); border-radius: 4px;
+    padding: 12px 16px; font-size: 13px; color: var(--muted);
+  }
+  #setup-note.on, #error-note.on { display: block; }
+  .footer { color: var(--muted); font-size: 11px; letter-spacing: 1.8px; text-transform: uppercase; font-weight: 700; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Claude Music</div>
+    <div><span class="status-dot" id="dot"></span></div>
+  </header>
+
+  <div id="setup-note">ACE-Step is not configured yet. Run <span class="mono">bash install.sh</span> in the claude-music repo, then reload this page.</div>
+  <div id="error-note"></div>
+
+  <div class="card">
+    <h2>Generate song</h2>
+    <textarea id="prompt" maxlength="512" placeholder="Describe your song, e.g. dreamy indie track about a rainy city"></textarea>
+
+    <div class="eyebrow section-label">Styles</div>
+    <div class="pills" id="genre-pills"></div>
+
+    <div class="eyebrow section-label">Presets</div>
+    <div class="pills" id="preset-pills"></div>
+
+    <div class="row">
+      <button class="pill" id="instrumental">Instrumental</button>
+      <div class="field"><label for="duration">Duration</label>
+        <select id="duration">
+          <option value="30">30 s</option>
+          <option value="60" selected>60 s</option>
+          <option value="120">2 min</option>
+          <option value="180">3 min</option>
+        </select>
+      </div>
+      <div class="field"><label for="quality">Quality</label>
+        <select id="quality">
+          <option value="draft">draft</option>
+          <option value="standard">standard</option>
+          <option value="high" selected>high</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="generate">Generate</button>
+    </div>
+
+    <div id="progress-row">
+      <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
+      <div class="progress-meta mono">
+        <span id="stage">Starting</span><span id="pct">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="player-card">
+    <div class="eyebrow" id="player-eyebrow">Now playing</div>
+    <h2 id="player-title" style="font-size:16px; margin:6px 0 0;"></h2>
+    <canvas id="wave" width="680" height="120"></canvas>
+    <audio id="audio"></audio>
+    <div class="player-controls">
+      <button class="btn" id="play">Play</button>
+      <span class="time mono" id="time">0:00 / 0:00</span>
+      <a class="btn" id="download" download>Download</a>
+      <button class="btn" id="open-folder">Open folder</button>
+      <button class="btn" id="similar">Similar</button>
+      <span class="stars" id="stars"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="eyebrow">Library</div>
+    <div id="library"></div>
+  </div>
+
+  <div class="footer">No cloud API &middot; Everything runs on your machine</div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const state = {
+  genres: [], presets: [], selected: new Set(),
+  instrumental: false, busy: false, current: null, tracks: [],
+  pollTimer: null,
+};
+
+/* ---------- data loading ---------- */
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || res.statusText);
+  return body;
+}
+
+async function init() {
+  try {
+    const status = await api('/api/status');
+    if (!status.configured) $('setup-note').classList.add('on');
+    if (status.busy) startPolling();
+    const g = await api('/api/genres');
+    state.genres = g.genres || [];
+    state.presets = g.presets || [];
+    renderPills();
+    await refreshLibrary();
+  } catch (e) { showError(e.message); }
+}
+
+function showError(msg) {
+  const n = $('error-note');
+  n.textContent = msg;
+  n.classList.add('on');
+  clearTimeout(n._t);
+  n._t = setTimeout(() => n.classList.remove('on'), 8000);
+}
+
+/* ---------- pills ---------- */
+function renderPills() {
+  const gp = $('genre-pills');
+  gp.textContent = '';
+  for (const g of state.genres) {
+    const b = document.createElement('button');
+    b.className = 'pill';
+    b.textContent = g.name;
+    b.onclick = () => {
+      if (state.selected.has(g.name)) state.selected.delete(g.name);
+      else state.selected.add(g.name);
+      b.classList.toggle('active');
+    };
+    gp.appendChild(b);
+  }
+  const pp = $('preset-pills');
+  pp.textContent = '';
+  for (const p of state.presets) {
+    const b = document.createElement('button');
+    b.className = 'pill';
+    b.textContent = p.name;
+    b.onclick = () => applyPreset(p);
+    pp.appendChild(b);
+  }
+}
+
+function applyPreset(p) {
+  $('prompt').value = p.caption;
+  state.selected = new Set(p.genres || []);
+  [...$('genre-pills').children].forEach(b =>
+    b.classList.toggle('active', state.selected.has(b.textContent)));
+  state.instrumental = !!p.instrumental;
+  $('instrumental').classList.toggle('active', state.instrumental);
+  if (p.duration) $('duration').value = closest([30, 60, 120, 180], p.duration);
+  if (p.quality && p.quality !== 'max') $('quality').value = p.quality;
+}
+
+const closest = (arr, v) => arr.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a);
+
+$('instrumental').onclick = () => {
+  state.instrumental = !state.instrumental;
+  $('instrumental').classList.toggle('active', state.instrumental);
+};
+
+/* ---------- caption assembly ---------- */
+function buildRequest() {
+  const chosen = state.genres.filter(g => state.selected.has(g.name));
+  const seen = new Set(), parts = [];
+  const push = s => String(s || '').split(',').forEach(t => {
+    t = t.trim();
+    if (t && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); parts.push(t); }
+  });
+  push($('prompt').value);
+  chosen.forEach(g => push(g.tags));
+  const req = {
+    caption: parts.join(', ').slice(0, 512),
+    duration: parseInt($('duration').value, 10),
+    quality: $('quality').value,
+    instrumental: state.instrumental,
+    genres: [...state.selected],
+  };
+  const first = chosen[0];
+  if (first) {
+    if (first.bpm) req.bpm = Math.round((first.bpm[0] + first.bpm[1]) / 2);
+    if (first.key) req.key = first.key;
+  }
+  return req;
+}
+
+/* ---------- generation + progress ---------- */
+$('generate').onclick = async () => {
+  const req = buildRequest();
+  if (!req.caption) { showError('Describe your song or pick a style first.'); return; }
+  try {
+    await api('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(req),
+    });
+    startPolling();
+  } catch (e) { showError(e.message); }
+};
+
+function setBusy(on) {
+  state.busy = on;
+  $('dot').classList.toggle('busy', on);
+  $('generate').disabled = on;
+  $('progress-row').classList.toggle('on', on);
+}
+
+function startPolling() {
+  if (state.pollTimer) return;
+  setBusy(true);
+  state.pollTimer = setInterval(poll, 500);
+  poll();
+}
+
+async function poll() {
+  let snap;
+  try { snap = await api('/api/progress'); }
+  catch (e) { return; }
+  if (snap.status === 'loading' || snap.status === 'generating') {
+    const pct = Math.round((snap.pct || 0) * 100);
+    $('bar').style.width = pct + '%';
+    $('pct').textContent = pct + '%';
+    $('stage').textContent = snap.status === 'loading'
+      ? 'Loading model' : (snap.stage || 'Generating');
+    return;
+  }
+  clearInterval(state.pollTimer);
+  state.pollTimer = null;
+  setBusy(false);
+  if (snap.status === 'error') showError(snap.error || 'Generation failed');
+  if (snap.status === 'done') {
+    $('bar').style.width = '100%';
+    await refreshLibrary();
+    if (state.tracks.length) loadTrack(state.tracks[0], false);
+  }
+}
+
+/* ---------- library ---------- */
+async function refreshLibrary() {
+  const lib = await api('/api/library');
+  state.tracks = lib.tracks || [];
+  const el = $('library');
+  el.textContent = '';
+  if (!state.tracks.length) {
+    const d = document.createElement('div');
+    d.className = 'track-meta';
+    d.textContent = 'Nothing here yet. Generate your first track above.';
+    el.appendChild(d);
+    return;
+  }
+  for (const t of state.tracks) {
+    const row = document.createElement('div');
+    row.className = 'track';
+    row.dataset.id = t.id;
+    const title = document.createElement('div');
+    title.className = 'track-title';
+    title.textContent = trackTitle(t);
+    const meta = document.createElement('span');
+    meta.className = 'track-meta mono';
+    meta.textContent = (t.created || '').slice(0, 10);
+    const stars = document.createElement('span');
+    stars.className = 'track-stars';
+    stars.textContent = t.rating ? '★'.repeat(t.rating) : '';
+    row.append(title, stars, meta);
+    if (t.quality) {
+      const q = document.createElement('span');
+      q.className = 'quality-pill';
+      q.textContent = t.quality;
+      row.appendChild(q);
+    }
+    row.onclick = () => loadTrack(t, true);
+    el.appendChild(row);
+  }
+  highlightPlaying();
+}
+
+function trackTitle(t) {
+  if (t.caption) return t.caption.length > 70 ? t.caption.slice(0, 70) + '…' : t.caption;
+  return t.file || t.id;
+}
+
+function highlightPlaying() {
+  [...$('library').children].forEach(r =>
+    r.classList && r.classList.toggle('playing', state.current && r.dataset.id === state.current.id));
+}
+
+/* ---------- player ---------- */
+const audio = $('audio');
+let actx = null, analyser = null, freq = null, rafId = null;
+
+function loadTrack(t, autoplay) {
+  state.current = t;
+  $('player-card').classList.add('on');
+  $('player-title').textContent = trackTitle(t);
+  $('download').href = '/api/audio/' + encodeURIComponent(t.file);
+  audio.src = '/api/audio/' + encodeURIComponent(t.file);
+  renderStars(t.rating || 0);
+  highlightPlaying();
+  drawStatic();
+  if (autoplay) playPause(true);
+}
+
+function ensureAnalyser() {
+  if (actx) return;
+  try {
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = actx.createMediaElementSource(audio);
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.75;
+    src.connect(analyser);
+    analyser.connect(actx.destination);
+    freq = new Uint8Array(analyser.frequencyBinCount);
+  } catch (e) { actx = 'failed'; }
+}
+
+function playPause(forcePlay) {
+  ensureAnalyser();
+  if (actx && actx.resume) actx.resume();
+  if (audio.paused || forcePlay) audio.play(); else audio.pause();
+}
+
+$('play').onclick = () => playPause(false);
+audio.onplay = () => { $('play').textContent = 'Pause'; startWave(); };
+audio.onpause = () => { $('play').textContent = 'Play'; stopWave(); };
+audio.onended = () => { $('play').textContent = 'Play'; stopWave(); };
+audio.ontimeupdate = () => {
+  $('time').textContent = fmt(audio.currentTime) + ' / ' + fmt(audio.duration);
+};
+const fmt = s => isFinite(s) ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '0:00';
+
+/* Waveform: brand geometry - bars width 5, pitch 6, radius 1, #D97757,
+   symmetric envelope around the vertical center, tallest mid-canvas. */
+const canvas = $('wave'), ctx2d = canvas.getContext('2d');
+
+function barLayout() {
+  const w = canvas.width, pitch = 6, bw = 5;
+  const n = Math.floor(w / pitch);
+  return { n, pitch, bw, mid: canvas.height / 2 };
+}
+
+function drawBars(heights) {
+  const { n, pitch, bw, mid } = barLayout();
+  ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  ctx2d.fillStyle = '#D97757';
+  for (let i = 0; i < n; i++) {
+    const h = Math.max(3, heights[i]);
+    const x = i * pitch, y = mid - h / 2;
+    if (ctx2d.roundRect) {
+      ctx2d.beginPath();
+      ctx2d.roundRect(x, y, bw, h, 1);
+      ctx2d.fill();
+    } else ctx2d.fillRect(x, y, bw, h);
+  }
+}
+
+function envelope(i, n) {
+  // Smooth center-weighted envelope, mirroring the hero SVG silhouette.
+  const t = i / (n - 1);
+  return Math.sin(Math.PI * t) ** 1.5;
+}
+
+function drawStatic() {
+  const { n, mid } = barLayout();
+  const hs = [];
+  for (let i = 0; i < n; i++) hs.push(6 + envelope(i, n) * (mid * 0.6));
+  drawBars(hs);
+}
+
+function startWave() {
+  if (!analyser || actx === 'failed') return;
+  const { n, mid } = barLayout();
+  const half = Math.ceil(n / 2);
+  const render = () => {
+    analyser.getByteFrequencyData(freq);
+    const hs = new Array(n);
+    // Low frequencies at the center, mirrored outward, like the brand mark.
+    for (let j = 0; j < half; j++) {
+      const bin = Math.floor(j / half * freq.length * 0.7);
+      const v = freq[bin] / 255;
+      const h = 6 + v * (canvas.height - 12) * (0.35 + 0.65 * envelope(half - j, n));
+      const c = Math.floor(n / 2);
+      if (c + j < n) hs[c + j] = h;
+      if (c - j >= 0) hs[c - j] = h;
+    }
+    for (let i = 0; i < n; i++) if (hs[i] === undefined) hs[i] = 6;
+    drawBars(hs);
+    rafId = requestAnimationFrame(render);
+  };
+  cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(render);
+}
+
+function stopWave() {
+  cancelAnimationFrame(rafId);
+  drawStatic();
+}
+
+/* ---------- actions ---------- */
+$('open-folder').onclick = () =>
+  api('/api/open-folder', { method: 'POST' }).catch(e => showError(e.message));
+
+$('similar').onclick = async () => {
+  const t = state.current;
+  if (!t) return;
+  $('prompt').value = t.caption || '';
+  state.selected = new Set(t.genres || []);
+  [...$('genre-pills').children].forEach(b =>
+    b.classList.toggle('active', state.selected.has(b.textContent)));
+  state.instrumental = !!t.instrumental;
+  $('instrumental').classList.toggle('active', state.instrumental);
+  if (t.duration) $('duration').value = closest([30, 60, 120, 180], t.duration);
+  if (t.quality && t.quality !== 'max') $('quality').value = t.quality;
+  if (!t.caption) { showError('No saved prompt for this track. Edit and generate.'); return; }
+  const req = buildRequest();
+  req.similar_to = t.id;
+  if (t.bpm) req.bpm = t.bpm;
+  if (t.key) req.key = t.key;
+  try {
+    await api('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(req),
+    });
+    startPolling();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (e) { showError(e.message); }
+};
+
+/* ---------- rating ---------- */
+function renderStars(rating) {
+  const el = $('stars');
+  el.textContent = '';
+  for (let i = 1; i <= 5; i++) {
+    const b = document.createElement('button');
+    b.className = 'star' + (i <= rating ? ' on' : '');
+    b.textContent = '★';
+    b.onclick = async () => {
+      const t = state.current;
+      if (!t) return;
+      try {
+        await api('/api/rate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ id: t.id, file: t.file, rating: i }),
+        });
+        t.rating = i;
+        renderStars(i);
+        refreshLibrary();
+      } catch (e) { showError(e.message); }
+    };
+    el.appendChild(b);
+  }
+}
+
+/* ---------- responsive canvas ---------- */
+function fitCanvas() {
+  const w = canvas.parentElement.clientWidth - 2;
+  if (w > 0 && Math.abs(canvas.width - w) > 8) {
+    canvas.width = w;
+    if (audio.paused) drawStatic();
+  }
+}
+window.addEventListener('resize', fitCanvas);
+
+init().then(fitCanvas);
+</script>
+</body>
+</html>

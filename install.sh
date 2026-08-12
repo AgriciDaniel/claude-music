@@ -328,6 +328,7 @@ if [ "$ALL_OK" = true ]; then
     echo "    \"Make me a pop song with lyrics about summer\""
     echo "    \"/music generate --caption 'jazz piano' --duration 60\""
     echo "    \"/music random\"  (surprise me!)"
+    echo "    \"/music web\"     (browser dashboard)"
     echo ""
     echo -e "  ${BOLD}To uninstall:${NC} bash $(pwd)/uninstall.sh"
 else

@@ -96,6 +96,37 @@ def get_free_vram_mb():
     return -1
 
 
+def emit_event(event, **fields):
+    """Print one NDJSON progress event to stderr (only with --progress).
+
+    stderr stays the machine-readable progress channel for wrappers such as
+    the web dashboard; stdout remains reserved for the single result JSON.
+    """
+    try:
+        print(json.dumps({"event": event, **fields}), file=sys.stderr, flush=True)
+    except Exception:
+        pass
+
+
+def make_progress(args):
+    """Return a Gradio-style progress callable for generate_music(), or None.
+
+    ACE-Step forwards this to the LM and DiT stages. It must never raise:
+    a broken progress line must not kill a generation.
+    """
+    if not getattr(args, "progress", False):
+        return None
+
+    def _progress(frac=None, desc=None, *a, **kw):
+        try:
+            pct = float(frac) if frac is not None else None
+        except (TypeError, ValueError):
+            pct = None
+        emit_event("progress", pct=pct, stage=str(desc) if desc else "")
+
+    return _progress
+
+
 def output_json(data):
     """Print JSON result to stdout."""
     print(json.dumps(data, indent=2, default=str))
@@ -278,6 +309,8 @@ def initialize_acestep(args):
     os.environ["TORCHAUDIO_USE_BACKEND"] = "ffmpeg"
 
     from acestep.handler import AceStepHandler
+    if getattr(args, "progress", False):
+        emit_event("stage", stage="loading_model")
     log(f"Loading DiT model: {args.model}...")
 
     # Memory/attention settings come from config.json so 16GB-VRAM cards can
@@ -336,6 +369,8 @@ def initialize_acestep(args):
             log(f"LM load failed ({e}), continuing without thinking mode")
             llm_handler = None
 
+    if getattr(args, "progress", False):
+        emit_event("stage", stage="generating")
     return handler, llm_handler, status
 
 
@@ -401,6 +436,7 @@ def cmd_generate(args):
         params=params,
         config=config,
         save_dir=save_dir,
+        progress=make_progress(args),
     )
     gen_time = time.time() - t0
 
@@ -518,6 +554,7 @@ def cmd_cover(args):
         params=params,
         config=config,
         save_dir=save_dir,
+        progress=make_progress(args),
     )
     gen_time = time.time() - t0
 
@@ -620,6 +657,7 @@ def cmd_repaint(args):
         params=params,
         config=config,
         save_dir=save_dir,
+        progress=make_progress(args),
     )
     gen_time = time.time() - t0
 
@@ -711,6 +749,7 @@ def cmd_extract(args):
     result = generate_music(
         dit_handler=handler, llm_handler=None,
         params=params, config=config, save_dir=save_dir,
+        progress=make_progress(args),
     )
     gen_time = time.time() - t0
 
@@ -782,6 +821,7 @@ def cmd_lego(args):
     result = generate_music(
         dit_handler=handler, llm_handler=llm_handler,
         params=params, config=config, save_dir=save_dir,
+        progress=make_progress(args),
     )
     gen_time = time.time() - t0
 
@@ -854,6 +894,7 @@ def cmd_complete(args):
     result = generate_music(
         dit_handler=handler, llm_handler=llm_handler,
         params=params, config=config, save_dir=save_dir,
+        progress=make_progress(args),
     )
     gen_time = time.time() - t0
 
@@ -932,6 +973,8 @@ def build_parser():
                              "or 'uuid' (leave ACE-Step's raw filenames)")
     parser.add_argument("--seed", type=int, default=-1, help="Random seed (-1 for random)")
     parser.add_argument("--batch", type=int, default=None, help="Batch size (number of variants)")
+    parser.add_argument("--progress", action="store_true",
+                        help="Emit NDJSON progress events to stderr (for wrappers)")
     parser.add_argument("--output", default=None, help="Output file path (for single output)")
     parser.add_argument("--output-dir",
                         default=config_default(_cfg, "output_dir", "~/Music/claude-music-output"),

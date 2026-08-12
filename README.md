@@ -168,7 +168,31 @@ keep ACE-Step's original filenames.
 /music library    — Browse your generated music
 /music lora       — Train custom styles
 /music setup      — Check if everything works
+/music web        - Local browser dashboard
 ```
+
+## Web Dashboard
+
+A minimalist local browser app for generating and browsing songs:
+
+```bash
+/music web
+```
+
+Or directly:
+
+```bash
+bash ~/.claude/skills/claude-music/scripts/music_web.sh
+```
+
+- One generate box with multi-select style buttons (28 genres) and presets
+- Live progress percentage while the model runs
+- Built-in player with waveform bars that move with the music
+- Library backed by your output folder, with 1-5 star ratings
+- Download a track, open its folder, or generate a similar one in one click
+
+Everything runs on `127.0.0.1` with the Python standard library only: no extra
+dependencies, no cloud calls.
 
 ## How It Works
 

@@ -39,6 +39,7 @@ allowed-tools:
 | `/music enhance` | Post-processing: normalize, denoise, stem separate |
 | `/music random` | Quick random generation with smart defaults |
 | `/music library` | Browse and manage generated music |
+| `/music web` | Local browser dashboard: generate, play, rate |
 | `/music lora` | LoRA/LoKr fine-tuning management |
 | `/music setup` | Verify installation and dependencies |
 
@@ -57,6 +58,7 @@ When the user provides a specific command, load the matching sub-skill:
 - `/music enhance` or intent is normalize/denoise/stem separate/master → Read `skills/claude-music-enhance/SKILL.md`
 - `/music random` or intent is quick generation/surprise me/random song → Read `skills/claude-music-random/SKILL.md`
 - `/music library` or intent is list songs/browse output/manage music → Read `skills/claude-music-library/SKILL.md`
+- `/music web` or intent is dashboard/browser app/web UI/visual player → Read `skills/claude-music-web/SKILL.md`
 - `/music lora` or intent is train/fine-tune/LoRA/custom style → Read `skills/claude-music-lora/SKILL.md`
 - `/music setup` → Run `bash ~/.claude/skills/claude-music/scripts/setup.sh`
 
@@ -162,6 +164,7 @@ The wrapper handles: path setup, environment variables, VRAM pre-check, `uv run`
 | `claude-music-enhance` | Processing | Loudness normalization, denoise, stems (reuses video skills) |
 | `claude-music-random` | Generation | Quick random generation with genre presets |
 | `claude-music-library` | Management | Browse/search generated music output |
+| `claude-music-web` | UI | Local browser dashboard (generate, play, rate) |
 | `claude-music-lora` | Training | LoRA/LoKr fine-tuning wrapper |
 
 ## Scripts

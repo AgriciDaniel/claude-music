@@ -1,0 +1,53 @@
+{
+  "_source": "references/genre-recipes.md (docs-derived v1 values)",
+  "genres": [
+    {"name": "Pop", "tags": "upbeat pop, catchy, female vocal, modern production", "bpm": [110, 130], "key": "C major", "quality": "standard"},
+    {"name": "Rock", "tags": "rock, electric guitar, powerful drums, energetic", "bpm": [120, 140], "key": "E minor", "quality": "standard"},
+    {"name": "Hip-Hop", "tags": "hip-hop, 808 bass, trap drums, male vocal", "bpm": [80, 100], "key": "A minor", "quality": "high"},
+    {"name": "EDM", "tags": "electronic, synths, heavy bass, driving beat", "bpm": [128, 140], "key": "A minor", "quality": "standard"},
+    {"name": "Jazz", "tags": "jazz, saxophone, piano trio, warm, live feel", "bpm": [100, 140], "key": "Bb major", "quality": "high"},
+    {"name": "Classical", "tags": "orchestral, strings, piano, elegant, symphonic", "bpm": [60, 120], "key": null, "quality": "high"},
+    {"name": "Lo-Fi", "tags": "lo-fi hip-hop, chill, atmospheric, vinyl crackle", "bpm": [70, 90], "key": "F major", "quality": "draft"},
+    {"name": "R&B", "tags": "R&B, soulful vocal, smooth, groove, warm bass", "bpm": [85, 100], "key": "Eb major", "quality": "high"},
+    {"name": "Country", "tags": "country, acoustic guitar, fiddle, male vocal", "bpm": [100, 130], "key": "G major", "quality": "standard"},
+    {"name": "Metal", "tags": "heavy metal, distorted guitar, double bass drums", "bpm": [130, 180], "key": "E minor", "quality": "standard"},
+    {"name": "Ambient", "tags": "ambient, atmospheric, ethereal pads, spacious", "bpm": [60, 80], "key": null, "quality": "high"},
+    {"name": "Latin", "tags": "latin, reggaeton, tropical, percussion", "bpm": [90, 105], "key": "A minor", "quality": "standard"},
+    {"name": "Afrobeat", "tags": "afrobeat, african percussion, warm bass, groovy", "bpm": [100, 130], "key": null, "quality": "standard"},
+    {"name": "K-Pop", "tags": "K-pop, catchy, synth, energetic, female vocal", "bpm": [110, 140], "key": null, "quality": "high"},
+    {"name": "Phonk", "tags": "phonk, dark, cowbell, Memphis rap, distorted", "bpm": [130, 145], "key": "A minor", "quality": "draft"},
+    {"name": "Trap", "tags": "trap, 808, hi-hats, dark, heavy bass", "bpm": [130, 170], "key": "A minor", "quality": "standard"},
+    {"name": "Drill", "tags": "drill, sliding 808, dark piano, aggressive", "bpm": [140, 145], "key": "G minor", "quality": "standard"},
+    {"name": "House", "tags": "house, four-on-the-floor, warm synths, groovy", "bpm": [120, 130], "key": "A minor", "quality": "standard"},
+    {"name": "Techno", "tags": "techno, industrial, dark, hypnotic, pounding", "bpm": [130, 150], "key": "A minor", "quality": "standard"},
+    {"name": "DnB", "tags": "drum and bass, fast breakbeat, heavy bass", "bpm": [170, 180], "key": "A minor", "quality": "standard"},
+    {"name": "Reggaeton", "tags": "reggaeton, dembow rhythm, latin, tropical", "bpm": [90, 100], "key": "A minor", "quality": "standard"},
+    {"name": "Bossa Nova", "tags": "bossa nova, gentle guitar, jazz harmony, warm", "bpm": [100, 130], "key": "C major", "quality": "high"},
+    {"name": "Blues", "tags": "blues, 12-bar, electric guitar, soulful", "bpm": [70, 120], "key": "E major", "quality": "high"},
+    {"name": "Folk", "tags": "folk, acoustic guitar, warm, storytelling", "bpm": [100, 130], "key": "G major", "quality": "standard"},
+    {"name": "Punk", "tags": "punk rock, fast, aggressive, raw, power chords", "bpm": [160, 200], "key": "E major", "quality": "draft"},
+    {"name": "Synthwave", "tags": "synthwave, 80s retro, analog synths, neon", "bpm": [100, 130], "key": "A minor", "quality": "standard"},
+    {"name": "Cinematic", "tags": "cinematic, epic, orchestral, dramatic, powerful", "bpm": [80, 140], "key": "C minor", "quality": "high"},
+    {"name": "Chiptune", "tags": "chiptune, 8-bit, retro game, square wave", "bpm": [120, 160], "key": "C major", "quality": "draft"}
+  ],
+  "presets": [
+    {
+      "name": "Lo-Fi Focus",
+      "caption": "lo-fi hip-hop, chill, atmospheric, vinyl crackle, mellow piano, subtle drums, relaxing",
+      "genres": ["Lo-Fi"],
+      "bpm": 80, "key": "F major", "duration": 120, "instrumental": true, "quality": "draft"
+    },
+    {
+      "name": "Epic Trailer",
+      "caption": "cinematic orchestral, epic, dramatic strings, brass fanfare, timpani, powerful, film score",
+      "genres": ["Cinematic"],
+      "bpm": 90, "key": "D minor", "duration": 120, "instrumental": true, "quality": "high"
+    },
+    {
+      "name": "Late Night Drive",
+      "caption": "synthwave, 80s retro, analog synths, neon, steady groove, nocturnal",
+      "genres": ["Synthwave"],
+      "bpm": 110, "key": "A minor", "duration": 120, "instrumental": true, "quality": "standard"
+    }
+  ]
+}

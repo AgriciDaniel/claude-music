@@ -35,14 +35,18 @@ claude-music/
 - **Output naming** — `generate_music()` writes its own UUID filenames, so `rename_outputs()` runs *after* generation in each `cmd_*` and renames in place to `slug_date_index_seed.ext`. It never overwrites (appends `-2`), keeps meaningful stems like `vocals`, and logs-and-continues if a rename fails. `slugify()` is also the basename sanitizer: only `[a-z0-9-]` survives a caption. Disable with `--naming uuid`.
 - **Settings precedence** — CLI flag > `config.json` > quality preset. `build_parser()` seeds `--quality`, `--format`, `--language` and `--output-dir` from config; `resolve_quality()` applies the same chain to the preset-owned keys. Preset-owned keys (`model`, `lm_model`, `batch_size`, `thinking`) are omitted from the shipped config on purpose — setting one pins it across every preset.
 
+- **Web dashboard** - `skills/claude-music/webapp/` holds a stdlib-only Python server (`server.py`) plus a single-file frontend (`index.html`). It shells out to `music_engine.py --progress` (NDJSON progress events on stderr) and stores per-track metadata sidecars in `<output_dir>/.claude-music/meta/` for ratings and generate-similar. The server must stay stdlib-only and bind `127.0.0.1` only.
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `skills/claude-music/scripts/music_engine.py` | Core engine — all 6 ACE-Step task types via argparse subcommands |
+| `skills/claude-music/webapp/server.py` | Web dashboard server (stdlib only, loopback only) |
+| `skills/claude-music/scripts/music_web.sh` | Dashboard launcher (starts server, opens browser) |
 | `skills/claude-music/scripts/music_engine.sh` | Bash wrapper — env setup, VRAM check, `uv run` invocation |
 | `skills/claude-music/scripts/music_export.sh` | FFmpeg platform export (Spotify/YouTube/TikTok/podcast/CD) |
-| `skills/claude-music/config.json` | ACE-Step path + generation defaults |
+| `skills/claude-music/config.json` | ACE-Step path + generation defaults (per-machine, untracked; seeded from `config.example.json` by the installers) |
 | `skills/claude-music/SKILL.md` | Orchestrator — routes `/music X` to sub-skills |
 
 ## Development
