@@ -17,13 +17,16 @@ No cloud, no subscription, no per-song fees. Your GPU does the work.
 
 ## Hear It
 
-Three unedited songs it made, exactly as they came out:
+Four unedited songs it made, exactly as they came out. All four are about
+the same subject (an SEO tool), with full sung lyrics written by Claude
+and vocals in three languages:
 
-| Track | The prompt that made it |
-|-------|-------------------------|
-| [Hub Anthem](examples/hub-anthem.mp3) | `AI marketing hub pro music., hip-hop, 808 bass, trap drums, male vocal` |
-| [Vinyl Sunrise](examples/vinyl-sunrise.mp3) | `lo-fi hip-hop, chill, vinyl crackle, mellow piano` |
-| [Neon Drive](examples/neon-drive.mp3) | `synthwave, 80s retro, analog synths, neon` |
+| Track | Style and voice |
+|-------|-----------------|
+| [Crawl Season](examples/crawl-season.mp3) | Hip-hop, English rap: "Ran one little audit, now the crawlers all obsessed" |
+| [SEO Caliente](examples/seo-caliente.mp3) | Latin pop / reggaeton, Spanish vocals |
+| [Tokyo Page One](examples/tokyo-page-one.mp3) | Japanese lo-fi / city pop, Japanese vocals |
+| [First Page Swing](examples/first-page-swing.mp3) | Jazz crooner with a piano trio |
 
 ## Get Started (5 minutes)
 
