@@ -277,11 +277,27 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the Python-API-vs-REST decision and o
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/            # 13 contract tests, <1s, no GPU required
+pytest tests/            # 41 contract tests, <1s, no GPU required
 ruff check skills/ tests/
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and PR checklist, and [SECURITY.md](SECURITY.md) for the threat model + how to report vulnerabilities.
+
+## What's new in v0.3
+
+- **Web dashboard** (`/music web`): a minimalist local browser app with style
+  buttons, presets, live progress percentage, an animated waveform player,
+  a rated library, downloads, open-folder, and generate-similar. Stdlib-only
+  server on 127.0.0.1, zero new dependencies.
+- `--progress` flag on `music_engine.py`: NDJSON progress events on stderr
+  for wrappers.
+- Config defaults are now honoured with explicit precedence: CLI flag >
+  `config.json` > quality preset.
+- Readable output filenames: `slug_date_index_seed.ext` instead of raw UUIDs
+  (opt out with `--naming uuid`).
+- `config.json` is no longer tracked; installers seed it from
+  `config.example.json`, so personal paths can never leak into the repo.
+- Test suite: 25 -> 41 GPU-free tests.
 
 ## What's new in v0.2
 
