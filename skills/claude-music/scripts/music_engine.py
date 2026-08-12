@@ -21,6 +21,7 @@ import argparse
 import gc
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -109,40 +110,157 @@ def error_json(msg, suggestion=None):
     sys.exit(1)
 
 
-def get_output_path(args, task_type, index=0):
-    """Generate an output file path."""
-    if args.output and index == 0:
-        return args.output
+def load_config():
+    """Load config.json. Returns {} if missing or unreadable.
 
-    output_dir = os.path.expanduser(args.output_dir)
-    os.makedirs(output_dir, exist_ok=True)
+    Never raises: a broken config must not stop --help from working.
+    """
+    config_path = Path(__file__).parent.parent / "config.json"
+    if not config_path.exists():
+        return {}
+    try:
+        with open(config_path) as f:
+            cfg = json.load(f)
+    except Exception as e:
+        log(f"Warning: could not read config.json ({e}), using built-in defaults")
+        return {}
+    return cfg if isinstance(cfg, dict) else {}
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    fmt = args.format if args.format != "wav32" else "wav"
 
-    if index > 0 or not args.output:
-        return os.path.join(output_dir, f"{task_type}_{timestamp}_{index + 1:02d}.{fmt}")
-    return args.output
+def config_default(defaults, key, fallback, choices=None):
+    """Read one key from the config 'defaults' block.
+
+    Falls back to the built-in default when the key is absent, null, or not one
+    of `choices`. An invalid value warns rather than crashing argparse, which
+    does not validate defaults against choices on its own.
+    """
+    value = defaults.get(key)
+    if value is None:
+        return fallback
+    if choices is not None and value not in choices:
+        log(f"Warning: config.json defaults.{key}={value!r} is not one of "
+            f"{sorted(choices)}, using {fallback!r}")
+        return fallback
+    return value
+
+
+def slugify(text, max_words=6, max_len=48):
+    """Filesystem-safe slug from free text. Returns '' if nothing usable.
+
+    Only [a-z0-9-] survives, so this doubles as the basename sanitizer: a
+    caption can never introduce a path separator or shell metacharacter.
+    """
+    words = re.findall(r"[A-Za-z0-9]+", (text or "").lower())
+    if not words:
+        return ""
+    return "-".join(words[:max_words])[:max_len].strip("-")
+
+
+def informative_stem(path):
+    """Return the original basename if it carries meaning, else ''.
+
+    ACE-Step names its own output files with UUIDs, which are pure noise. But
+    some task types (extract) encode the stem — 'vocals', 'drums' — in that
+    name, and that must survive renaming.
+    """
+    stem = os.path.splitext(os.path.basename(path))[0]
+    compact = re.sub(r"[^0-9a-zA-Z]", "", stem).lower()
+    if not compact:
+        return ""
+    # UUID / hex blob: long and hex-only, or the 8-4-4-4-12 shape
+    if len(compact) >= 16 and re.fullmatch(r"[0-9a-f]+", compact):
+        return ""
+    if re.fullmatch(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", stem.lower()):
+        return ""
+    return slugify(stem, max_words=3, max_len=24)
+
+
+def rename_outputs(args, outputs, label="", task_type="track"):
+    """Rename pipeline-written files to readable names, in place.
+
+    ACE-Step's pipeline chooses its own filenames (UUIDs), so this runs after
+    generation rather than passing a path in. Never overwrites an existing
+    file: on collision it appends -2, -3, ... A failed rename is logged and
+    the original path kept, so a permissions problem cannot lose a track.
+
+    Result: lofi-afro-latin-percussion_20260812-1530_01_s3128607774.flac
+    The seed is embedded because it is the one field you cannot recover from
+    the file later, and it is what makes a track reproducible.
+    """
+    if getattr(args, "naming", "descriptive") != "descriptive":
+        return outputs
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M")
+    slug = slugify(label) or slugify(task_type) or "track"
+
+    for out in outputs:
+        old = out.get("path")
+        if not old or not os.path.isfile(old):
+            continue
+
+        directory = os.path.dirname(old)
+        ext = os.path.splitext(old)[1]
+        parts = [slug, stamp, f"{out.get('index', 1):02d}"]
+
+        kept = informative_stem(old)
+        if kept:
+            parts.append(kept)
+
+        seed = out.get("seed")
+        if isinstance(seed, int) and seed >= 0:
+            parts.append(f"s{seed}")
+
+        base = "_".join(parts)
+        new = os.path.join(directory, base + ext)
+        counter = 2
+        while os.path.exists(new):
+            new = os.path.join(directory, f"{base}-{counter}{ext}")
+            counter += 1
+
+        try:
+            os.rename(old, new)
+            out["path"] = new
+        except OSError as e:
+            log(f"Warning: could not rename {os.path.basename(old)} ({e}), keeping original name")
+
+    return outputs
 
 
 def resolve_quality(args):
-    """Apply quality preset, then override with explicit args."""
+    """Resolve generation params with precedence: CLI flag > config.json > preset.
+
+    The preset owns model, lm_model, batch_size and thinking, so config.json
+    ships without those keys and the presets stay intact out of the box. A user
+    who adds one to defaults pins it across every preset.
+    """
     preset = QUALITY_PRESETS.get(args.quality, QUALITY_PRESETS["standard"])
+    defaults = getattr(args, "_config_defaults", None) or {}
+
+    def pick(cli_value, key):
+        """CLI wins if set; then config.json; then the quality preset."""
+        if cli_value is not None:
+            return cli_value
+        if defaults.get(key) is not None:
+            return defaults[key]
+        return preset[key]
 
     if args.model is None:
-        args.model = preset["model"]
+        args.model = pick(None, "model")
     if args.lm_model is None and not hasattr(args, "_lm_model_set"):
-        args.lm_model = preset["lm_model"]
+        args.lm_model = pick(None, "lm_model")
     if args.inference_steps is None:
         args.inference_steps = preset["inference_steps"]
     if args.guidance_scale is None:
         args.guidance_scale = preset["guidance_scale"]
     if args.batch is None:
-        args.batch = preset["batch_size"]
+        # config.json calls this batch_size; the CLI flag is --batch
+        args.batch = (defaults["batch_size"]
+                      if defaults.get("batch_size") is not None
+                      else preset["batch_size"])
     if args.shift is None:
         args.shift = preset["shift"]
     if not hasattr(args, "thinking") or args.thinking is None:
-        args.thinking = preset["thinking"]
+        args.thinking = pick(None, "thinking")
 
     return args
 
@@ -162,15 +280,22 @@ def initialize_acestep(args):
     from acestep.handler import AceStepHandler
     log(f"Loading DiT model: {args.model}...")
 
+    # Memory/attention settings come from config.json so 16GB-VRAM cards can
+    # keep CPU offload on while larger cards can turn it off for speed.
+    defaults = getattr(args, "_config_defaults", None) or {}
+    use_flash = config_default(defaults, "use_flash_attention", True)
+    offload = config_default(defaults, "offload_to_cpu", True)
+    offload_dit = config_default(defaults, "offload_dit_to_cpu", True)
+
     handler = AceStepHandler()
     t0 = time.time()
     status, success = handler.initialize_service(
         project_root=str(project_root),
         config_path=args.model,
         device="auto",
-        use_flash_attention=True,
-        offload_to_cpu=True,
-        offload_dit_to_cpu=True,
+        use_flash_attention=use_flash,
+        offload_to_cpu=offload,
+        offload_dit_to_cpu=offload_dit,
     )
 
     if not success:
@@ -200,7 +325,7 @@ def initialize_acestep(args):
                 lm_model_path=args.lm_model,
                 backend=backend,
                 device="cuda",
-                offload_to_cpu=True,
+                offload_to_cpu=offload,
             )
             if not lm_success:
                 log(f"LM init failed: {lm_status}, continuing without thinking mode")
@@ -306,6 +431,9 @@ def cmd_generate(args):
                 "size_mb": round(size_mb, 2),
                 "index": i + 1,
             })
+
+    outputs = rename_outputs(args, outputs,
+                             label=args.caption or args.lyrics, task_type="text2music")
 
     output_json({
         "success": True,
@@ -416,6 +544,11 @@ def cmd_cover(args):
                 "size_mb": round(size_mb, 2), "index": i + 1,
             })
 
+    outputs = rename_outputs(
+        args, outputs,
+        label=args.caption or informative_stem(args.src_audio) or "cover",
+        task_type="cover")
+
     output_json({
         "success": True,
         "task_type": "cover",
@@ -513,6 +646,11 @@ def cmd_repaint(args):
                 "size_mb": round(size_mb, 2), "index": i + 1,
             })
 
+    outputs = rename_outputs(
+        args, outputs,
+        label=args.caption or informative_stem(args.src_audio) or "repaint",
+        task_type="repaint")
+
     output_json({
         "success": True,
         "task_type": "repaint",
@@ -589,6 +727,11 @@ def cmd_extract(args):
         if path and os.path.isfile(path):
             outputs.append({"path": path, "index": i + 1})
 
+    outputs = rename_outputs(
+        args, outputs,
+        label=informative_stem(args.src_audio) or "extract",
+        task_type="extract")
+
     output_json({
         "success": True, "task_type": "extract",
         "outputs": outputs,
@@ -654,6 +797,11 @@ def cmd_lego(args):
                 break
         if path and os.path.isfile(path):
             outputs.append({"path": path, "index": i + 1})
+
+    outputs = rename_outputs(
+        args, outputs,
+        label=informative_stem(args.src_audio) or "lego",
+        task_type="lego")
 
     output_json({
         "success": True, "task_type": "lego",
@@ -722,6 +870,11 @@ def cmd_complete(args):
         if path and os.path.isfile(path):
             outputs.append({"path": path, "index": i + 1})
 
+    outputs = rename_outputs(
+        args, outputs,
+        label=informative_stem(args.src_audio) or "complete",
+        task_type="complete")
+
     output_json({
         "success": True, "task_type": "complete",
         "outputs": outputs,
@@ -744,18 +897,18 @@ def build_parser():
     # Read default from config.json if available. Do NOT exit on a missing/
     # unconfigured path here — --help must always work. Validation happens in
     # main() once a subcommand is selected.
-    default_ace_dir = None
-    config_path = Path(__file__).parent.parent / "config.json"
-    if config_path.exists():
-        try:
-            import json as _json
-            with open(config_path) as _f:
-                _cfg = _json.load(_f)
-            val = _cfg.get("ace_step_dir", "")
-            if val and val != "CHANGE_ME":
-                default_ace_dir = val
-        except Exception:
-            pass
+    _cfg = load_config()
+    _defaults = _cfg.get("defaults") or {}
+    if not isinstance(_defaults, dict):
+        _defaults = {}
+
+    default_ace_dir = _cfg.get("ace_step_dir") or None
+    if default_ace_dir == "CHANGE_ME":
+        default_ace_dir = None
+
+    quality_choices = ["draft", "standard", "high", "max"]
+    format_choices = ["flac", "wav", "mp3", "wav32", "opus", "aac"]
+    _lang = config_default(_defaults, "language", "en")
 
     parser.add_argument("--ace-step-dir", default=default_ace_dir,
                         help="ACE-Step installation directory")
@@ -763,15 +916,30 @@ def build_parser():
                         help="DiT model variant (acestep-v15-turbo, acestep-v15-base, acestep-v15-xl-turbo, etc.)")
     parser.add_argument("--lm-model", default=None,
                         help="LM model (acestep-5Hz-lm-0.6B, acestep-5Hz-lm-1.7B, acestep-5Hz-lm-4B, or none)")
-    parser.add_argument("--quality", default="standard", choices=["draft", "standard", "high", "max"],
+    parser.add_argument("--quality",
+                        default=config_default(_defaults, "quality", "standard", quality_choices),
+                        choices=quality_choices,
                         help="Quality preset (overridable by specific params)")
-    parser.add_argument("--format", default="flac", choices=["flac", "wav", "mp3", "wav32", "opus", "aac"],
+    parser.add_argument("--format",
+                        default=config_default(_defaults, "format", "flac", format_choices),
+                        choices=format_choices,
                         help="Output audio format")
+    parser.add_argument("--naming",
+                        default=config_default(_defaults, "naming", "descriptive",
+                                               ["descriptive", "uuid"]),
+                        choices=["descriptive", "uuid"],
+                        help="Output filenames: 'descriptive' (caption_date_index_seed) "
+                             "or 'uuid' (leave ACE-Step's raw filenames)")
     parser.add_argument("--seed", type=int, default=-1, help="Random seed (-1 for random)")
     parser.add_argument("--batch", type=int, default=None, help="Batch size (number of variants)")
     parser.add_argument("--output", default=None, help="Output file path (for single output)")
-    parser.add_argument("--output-dir", default="~/Music/claude-music-output",
+    parser.add_argument("--output-dir",
+                        default=config_default(_cfg, "output_dir", "~/Music/claude-music-output"),
                         help="Output directory for generated files")
+
+    # Preset-owned keys (model, lm_model, batch_size, thinking) are resolved in
+    # resolve_quality(), which needs the config block at that point.
+    parser.set_defaults(_config_defaults=_defaults)
 
     sub = parser.add_subparsers(dest="command", help="Available commands")
 
@@ -780,7 +948,7 @@ def build_parser():
     p_gen.add_argument("--caption", "-c", default="", help="Music description/style tags")
     p_gen.add_argument("--lyrics", "-l", default="", help="Lyrics with structure tags")
     p_gen.add_argument("--instrumental", action="store_true", help="Instrumental only (no vocals)")
-    p_gen.add_argument("--language", default="en", help="Vocal language code (en, zh, ja, etc.)")
+    p_gen.add_argument("--language", default=_lang, help="Vocal language code (en, zh, ja, etc.)")
     p_gen.add_argument("--bpm", type=int, default=None, help="Beats per minute (30-300)")
     p_gen.add_argument("--key", default=None, help="Musical key (e.g., 'C major', 'Am')")
     p_gen.add_argument("--time-sig", default=None, help="Time signature (2, 3, 4, 6)")
@@ -800,7 +968,7 @@ def build_parser():
     p_cov.add_argument("--cover-strength", type=float, default=0.5,
                         help="Reference fidelity (0.0=reimagine, 1.0=faithful)")
     p_cov.add_argument("--instrumental", action="store_true")
-    p_cov.add_argument("--language", default="en")
+    p_cov.add_argument("--language", default=_lang)
     p_cov.add_argument("--bpm", type=int, default=None)
     p_cov.add_argument("--key", default=None)
     p_cov.add_argument("--time-sig", default=None)
@@ -820,7 +988,7 @@ def build_parser():
     p_rep.add_argument("--caption", "-c", default="", help="Style description for repainted section")
     p_rep.add_argument("--lyrics", "-l", default="")
     p_rep.add_argument("--instrumental", action="store_true")
-    p_rep.add_argument("--language", default="en")
+    p_rep.add_argument("--language", default=_lang)
     p_rep.add_argument("--bpm", type=int, default=None)
     p_rep.add_argument("--key", default=None)
     p_rep.add_argument("--duration", type=float, default=-1.0)

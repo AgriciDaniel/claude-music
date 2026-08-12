@@ -13,11 +13,14 @@ in under 1 second so CI stays fast.
 """
 from __future__ import annotations
 
+import argparse
 import ast
 import io
 import json
 import subprocess
+import uuid
 from contextlib import redirect_stdout
+from pathlib import Path
 
 import pytest
 
@@ -204,12 +207,152 @@ def test_config_json_placeholder_or_absolute(config_json):
 
 
 def test_config_defaults_shape(config_json):
-    """Guard: config defaults declare the keys music_engine.py expects."""
+    """Guard: config defaults declare the keys music_engine.py actually reads.
+
+    model, lm_model, batch_size and thinking are deliberately NOT required —
+    the quality preset owns them. They are honoured as optional pins if a user
+    adds them, but shipping them would override every preset (a config
+    batch_size of 2 would silently defeat draft's batch of 4).
+    """
     defaults = config_json["defaults"]
-    required = {"model", "quality", "format", "batch_size", "thinking", "language"}
+    required = {"quality", "format", "language"}
     assert required.issubset(set(defaults.keys())), (
         f"config.defaults is missing keys: {required - set(defaults.keys())}"
     )
+
+
+def test_config_defaults_are_honoured_by_parser(engine_module, config_json):
+    """Regression: the defaults block must reach argparse.
+
+    Before this was wired, --quality hardcoded default="standard" and every
+    key in config.defaults was dead config that looked authoritative.
+    """
+    parser = engine_module.build_parser()
+    args = parser.parse_args(["generate", "-c", "x"])
+    assert args.quality == config_json["defaults"]["quality"]
+    assert args.format == config_json["defaults"]["format"]
+    assert args.language == config_json["defaults"]["language"]
+
+
+def test_quality_preset_survives_explicit_flag(engine_module):
+    """CLI > config > preset. An explicit --quality must restore that preset's
+    model/LM/thinking/batch even when config.json defaults to something else."""
+    parser = engine_module.build_parser()
+
+    draft = engine_module.resolve_quality(
+        parser.parse_args(["--quality", "draft", "generate", "-c", "x"]))
+    assert draft.lm_model is None
+    assert draft.thinking is False
+    assert draft.batch == 4, "config must not clobber the draft preset's batch"
+
+    high = engine_module.resolve_quality(
+        parser.parse_args(["--quality", "high", "generate", "-c", "x"]))
+    assert high.lm_model == "acestep-5Hz-lm-1.7B"
+    assert high.thinking is True
+
+
+def test_cli_flag_beats_config_default(engine_module):
+    """An explicit CLI flag must win over config.json."""
+    parser = engine_module.build_parser()
+    args = engine_module.resolve_quality(
+        parser.parse_args(["--batch", "7", "--format", "wav", "generate", "-c", "x"]))
+    assert args.batch == 7
+    assert args.format == "wav"
+
+
+def test_invalid_config_value_falls_back(engine_module):
+    """A bad enum in config.json must warn and fall back, not crash.
+
+    argparse does not validate defaults against choices, so an unchecked bad
+    value would otherwise flow straight into the pipeline.
+    """
+    assert engine_module.config_default(
+        {"quality": "ultra"}, "quality", "standard",
+        ["draft", "standard", "high", "max"]) == "standard"
+    assert engine_module.config_default({}, "quality", "standard") == "standard"
+    assert engine_module.config_default({"quality": None}, "quality", "standard") == "standard"
+    assert engine_module.config_default({"quality": "high"}, "quality", "standard") == "high"
+
+
+# ---------------------------------------------------------------------------
+# (d2) Output naming
+# ---------------------------------------------------------------------------
+
+def test_slugify_strips_path_and_shell_metacharacters(engine_module):
+    """A caption reaches the filesystem, so it must not carry separators."""
+    dirty = "../../etc/passwd; rm -rf ~ && echo $HOME"
+    slug = engine_module.slugify(dirty)
+    assert "/" not in slug and "\\" not in slug
+    assert not any(c in slug for c in ";&$|`'\" ")
+    assert engine_module.slugify("") == ""
+    assert engine_module.slugify("!!! ???") == ""
+
+
+def test_slugify_bounds_length(engine_module):
+    slug = engine_module.slugify("one two three four five six seven eight nine")
+    assert slug.count("-") <= 5, "should keep at most 6 words"
+    assert len(engine_module.slugify("x" * 200)) <= 48
+
+
+def test_informative_stem_drops_uuids_keeps_labels(engine_module):
+    """UUID names are noise; real stem labels must survive renaming."""
+    assert engine_module.informative_stem("/out/fdd0cca5-0d06-2c6b-e7dd-1bd0a41273ce.flac") == ""
+    assert engine_module.informative_stem("/out/8e71acc2d949ef877beb.flac") == ""
+    assert engine_module.informative_stem("/out/vocals.flac") == "vocals"
+    assert engine_module.informative_stem("/out/drums_stem.wav") == "drums-stem"
+
+
+def test_rename_outputs_builds_readable_name(engine_module, tmp_path):
+    src = tmp_path / "fdd0cca5-0d06-2c6b-e7dd-1bd0a41273ce.flac"
+    src.write_bytes(b"audio")
+
+    args = argparse.Namespace(naming="descriptive")
+    outputs = [{"path": str(src), "seed": 3128607774, "index": 1}]
+    engine_module.rename_outputs(args, outputs, label="lo-fi, afro-latin percussion")
+
+    name = Path(outputs[0]["path"]).name
+    assert name.startswith("lo-fi-afro-latin-percussion_")
+    assert name.endswith("_01_s3128607774.flac")
+    assert Path(outputs[0]["path"]).exists()
+    assert not src.exists(), "original UUID file should have been renamed, not copied"
+
+
+def test_rename_outputs_never_overwrites(engine_module, tmp_path):
+    """Two runs with the same caption in the same minute must not clobber."""
+    args = argparse.Namespace(naming="descriptive")
+    made = []
+    for _ in range(2):
+        src = tmp_path / f"{uuid.uuid4()}.flac"
+        src.write_bytes(b"audio")
+        outputs = [{"path": str(src), "seed": 7, "index": 1}]
+        engine_module.rename_outputs(args, outputs, label="same caption")
+        made.append(outputs[0]["path"])
+
+    assert made[0] != made[1], "second file must get a -2 suffix, not overwrite"
+    assert all(Path(p).exists() for p in made)
+    assert len(list(tmp_path.glob("*.flac"))) == 2, "no file may be lost"
+
+
+def test_naming_uuid_mode_is_a_no_op(engine_module, tmp_path):
+    src = tmp_path / "keep-this-name.flac"
+    src.write_bytes(b"audio")
+    args = argparse.Namespace(naming="uuid")
+    outputs = [{"path": str(src), "seed": 1, "index": 1}]
+    engine_module.rename_outputs(args, outputs, label="whatever")
+    assert outputs[0]["path"] == str(src)
+    assert src.exists()
+
+
+def test_rename_outputs_survives_missing_file(engine_module, tmp_path):
+    """A path the pipeline reported but did not write must not raise."""
+    args = argparse.Namespace(naming="descriptive")
+    outputs = [{"path": str(tmp_path / "gone.flac"), "seed": 1, "index": 1}]
+    engine_module.rename_outputs(args, outputs, label="x")  # must not raise
+
+
+def test_naming_default_comes_from_config(engine_module):
+    parser = engine_module.build_parser()
+    assert parser.parse_args(["generate", "-c", "x"]).naming in ("descriptive", "uuid")
 
 
 # ---------------------------------------------------------------------------
