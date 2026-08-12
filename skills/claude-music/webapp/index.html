@@ -588,6 +588,7 @@ async function poll() {
     $('bar').style.width = '100%';
     await refreshLibrary();
     if (state.tracks.length) loadTrack(state.tracks[0], false);
+    confettiAt($('player-art'));
   }
 }
 
@@ -680,6 +681,38 @@ function relTime(iso) {
     return then.toTimeString().slice(0, 5);
   }
   return iso.slice(0, 10);
+}
+
+/* ---------- confetti (fires when a generation lands) ---------- */
+const CONFETTI_COLORS = ['#D97757', '#facc15', '#22c55e', '#3b82f6', '#f472b6'];
+
+function confettiAt(el) {
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const ox = rect.left + rect.width / 2;
+  const oy = rect.top + rect.height / 2;
+  for (let i = 0; i < 24; i++) {
+    const p = document.createElement('div');
+    const size = 5 + Math.random() * 4;
+    const round = Math.random() < 0.5;
+    p.style.cssText = 'position:fixed; z-index:50; pointer-events:none;'
+      + 'left:' + ox + 'px; top:' + oy + 'px;'
+      + 'width:' + size + 'px; height:' + size + 'px;'
+      + (round ? 'border-radius:50%;' : 'border-radius:1px;')
+      + 'background:' + CONFETTI_COLORS[i % CONFETTI_COLORS.length] + ';';
+    document.body.appendChild(p);
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 40 + Math.random() * 90;
+    const dx = Math.cos(angle) * dist;
+    const dy = Math.sin(angle) * dist - 60 - Math.random() * 50;
+    const rot = (Math.random() - 0.5) * 720;
+    p.animate([
+      { transform: 'translate(-50%, -50%) rotate(0deg) scale(1)', opacity: 1 },
+      { transform: 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px)) '
+        + 'rotate(' + rot + 'deg) scale(0)', opacity: 0 },
+    ], { duration: 700 + Math.random() * 400, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' })
+      .onfinish = () => p.remove();
+  }
 }
 
 /* ---------- library ---------- */
