@@ -287,7 +287,8 @@
   <div class="card">
     <h2>Generate song</h2>
     <div class="composer">
-      <textarea id="prompt" maxlength="512" placeholder="Describe the song you want to create..."></textarea>
+      <textarea id="prompt" maxlength="512" placeholder="Describe the sound: genre, mood, instruments, voice. Put the words to sing in Lyrics."></textarea>
+      <textarea id="lyrics" maxlength="4096" style="display:none; border-top:1px solid var(--line); border-radius:0; min-height:110px;" placeholder="[verse]&#10;Write the words to sing, or leave empty and the AI writes them from your description.&#10;[chorus]&#10;Structure tags like [verse] and [chorus] make vocals much better."></textarea>
       <div class="composer-bar">
         <button class="chip" id="styles-chip" title="Pick one or more styles">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
@@ -298,6 +299,10 @@
           <div class="eyebrow" style="margin-bottom:10px">Styles &middot; pick any</div>
           <div class="pills" id="genre-pills"></div>
         </div>
+        <button class="chip" id="lyrics-chip" title="Write or paste the words to sing">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+          Lyrics
+        </button>
         <button class="chip" id="instrumental" title="No vocals">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V6l10-2v11"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="15" r="2.5"/></svg>
           Instrumental
@@ -540,6 +545,14 @@ $('instrumental').onclick = () => {
   $('instrumental').classList.toggle('active', state.instrumental);
 };
 
+$('lyrics-chip').onclick = () => {
+  const box = $('lyrics');
+  const show = box.style.display === 'none';
+  box.style.display = show ? '' : 'none';
+  $('lyrics-chip').classList.toggle('active', show);
+  if (show) box.focus();
+};
+
 /* ---------- caption assembly ---------- */
 function buildRequest() {
   const chosen = state.genres.filter(g => state.selected.has(g.name));
@@ -557,6 +570,8 @@ function buildRequest() {
     instrumental: state.instrumental,
     genres: [...state.selected],
   };
+  const lyrics = $('lyrics').value.trim();
+  if (lyrics && !state.instrumental) req.lyrics = lyrics;
   const first = chosen[0];
   if (first) {
     if (first.bpm) req.bpm = Math.round((first.bpm[0] + first.bpm[1]) / 2);
