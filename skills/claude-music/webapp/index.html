@@ -157,6 +157,29 @@
     display: inline-flex; align-items: center;
   }
   .track-stars { color: var(--brand); font-size: 12px; letter-spacing: 1px; }
+  .thumb {
+    flex: none; border-radius: 6px; overflow: hidden;
+    width: 34px; height: 34px; background: var(--well);
+  }
+  .thumb svg { display: block; width: 100%; height: 100%; }
+  .thumb-lg { width: 64px; height: 64px; border-radius: 8px; }
+  .player-head { display: flex; gap: 14px; align-items: center; }
+  .player-meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .track-pending { cursor: default; }
+  .track-pending .track-title {
+    background: linear-gradient(90deg, var(--muted) 25%, var(--fg) 50%, var(--muted) 75%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+    animation: shimmer 1.6s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .thumb-pending {
+    background: linear-gradient(135deg, var(--well), var(--line));
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  #quick-actions { margin-top: 12px; }
+  .chev { opacity: 0.55; }
   #setup-note, #error-note {
     display: none; border: 1px solid var(--brand); border-radius: 4px;
     padding: 12px 16px; font-size: 13px; color: var(--muted);
@@ -205,8 +228,12 @@
     <div class="composer">
       <textarea id="prompt" maxlength="512" placeholder="Describe the song you want to create..."></textarea>
       <div class="composer-bar">
-        <button class="chip" id="instrumental" title="No vocals">Instrumental</button>
+        <button class="chip" id="instrumental" title="No vocals">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V6l10-2v11"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="15" r="2.5"/></svg>
+          Instrumental
+        </button>
         <label class="chip" title="Track length">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
           <select id="duration">
             <option value="30">30 s</option>
             <option value="60" selected>1 min</option>
@@ -219,6 +246,7 @@
           </select>
         </label>
         <label class="chip" title="Model quality preset">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg>
           <select id="quality">
             <option value="draft">draft</option>
             <option value="standard">standard</option>
@@ -226,16 +254,13 @@
             <option value="max">max</option>
           </select>
         </label>
-        <button class="btn-primary" id="generate">Generate</button>
+        <button class="btn-primary" id="generate"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px; margin-right:6px"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/></svg><span id="generate-label">Generate</span></button>
       </div>
     </div>
     <div class="progress-meta mono" style="margin-top:8px"><span id="quality-hint"></span></div>
 
     <div class="eyebrow section-label">Styles</div>
     <div class="pills" id="genre-pills"></div>
-
-    <div class="eyebrow section-label">Presets</div>
-    <div class="pills" id="preset-pills"></div>
 
     <div id="progress-row">
       <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
@@ -247,7 +272,13 @@
 
   <div class="card" id="player-card">
     <div class="eyebrow" id="player-eyebrow">Now playing</div>
-    <h2 id="player-title" style="font-size:16px; margin:6px 0 0;"></h2>
+    <div class="player-head" style="margin-top:8px">
+      <div class="thumb thumb-lg" id="player-art"></div>
+      <div style="min-width:0">
+        <h2 id="player-title" style="font-size:16px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></h2>
+        <div class="player-meta" id="player-meta"></div>
+      </div>
+    </div>
     <canvas id="wave" width="680" height="140"></canvas>
     <div class="bar-track" id="seek-track" style="cursor:pointer; margin-bottom:12px;"><div class="bar-fill" id="seek-fill"></div></div>
     <audio id="audio"></audio>
@@ -270,6 +301,12 @@
         </svg><span id="optimize-label">Optimize</span>
       </button>
       <span class="stars" id="stars"></span>
+    </div>
+    <div class="pills" id="quick-actions">
+      <button class="pill" data-mod="calmer">Calmer</button>
+      <button class="pill" data-mod="bass">More bass</button>
+      <button class="pill" data-mod="faster">Faster</button>
+      <button class="pill" data-mod="remix">Remix</button>
     </div>
     <div class="pills" id="similar-strength">
       <span class="eyebrow" style="margin-right:6px">Similarity</span>
@@ -327,8 +364,25 @@ const QUALITY_HINTS = {
   high: '~25 s, thinking LM. Better lyrics and structure.',
   max: '~3-5 min, base model. Highest quality, needs the most VRAM.',
 };
+// Free VRAM (MB) a preset comfortably needs on this machine right now.
+const QUALITY_VRAM_MB = { draft: 4000, standard: 4000, high: 4000, max: 8000 };
+
 function updateQualityHint() {
-  $('quality-hint').textContent = QUALITY_HINTS[$('quality').value] || '';
+  const q = $('quality').value;
+  const el = $('quality-hint');
+  // Keep the line empty unless there is a real compatibility warning;
+  // preset descriptions live in the select's tooltip instead.
+  el.textContent = '';
+  el.style.color = '';
+  $('quality').title = QUALITY_HINTS[q] || '';
+  const free = state.freeVram;
+  if (free !== null && free !== undefined && free < QUALITY_VRAM_MB[q]) {
+    const rec = q === 'max' ? 'high' : 'draft';
+    el.textContent = 'Your GPU has only ' + (free / 1024).toFixed(1)
+      + ' GB free right now, which may be too little for ' + q
+      + '. Recommended: ' + rec + ', or close other GPU apps first.';
+    el.style.color = 'var(--brand)';
+  }
 }
 $('quality').onchange = updateQualityHint;
 
@@ -337,6 +391,8 @@ async function init() {
   try {
     const status = await api('/api/status');
     if (!status.configured) $('setup-note').classList.add('on');
+    state.freeVram = status.free_vram_mb;
+    updateQualityHint();
     if (status.free_vram_mb !== null && status.free_vram_mb !== undefined && status.free_vram_mb < 4000) {
       showError('Low free VRAM (' + (status.free_vram_mb / 1024).toFixed(1)
         + ' GB). Close other GPU apps, or use draft quality and short durations.');
@@ -403,25 +459,6 @@ function renderGenrePills() {
 
 function renderPills() {
   renderGenrePills();
-  const pp = $('preset-pills');
-  pp.textContent = '';
-  for (const p of state.presets) {
-    const b = document.createElement('button');
-    b.className = 'pill';
-    b.textContent = p.name;
-    b.onclick = () => applyPreset(p);
-    pp.appendChild(b);
-  }
-}
-
-function applyPreset(p) {
-  $('prompt').value = p.caption;
-  state.selected = new Set(p.genres || []);
-  renderGenrePills();
-  state.instrumental = !!p.instrumental;
-  $('instrumental').classList.toggle('active', state.instrumental);
-  if (p.duration) $('duration').value = closest([30, 60, 120, 180, 240, 300, 480, 600], p.duration);
-  if (p.quality && p.quality !== 'max') $('quality').value = p.quality;
 }
 
 const closest = (arr, v) => arr.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a);
@@ -460,6 +497,7 @@ function buildRequest() {
 $('generate').onclick = async () => {
   const req = buildRequest();
   if (!req.caption) { showError('Describe your song or pick a style first.'); return; }
+  state.pendingCaption = req.caption;
   try {
     await api('/api/generate', {
       method: 'POST',
@@ -474,13 +512,14 @@ function setBusy(on) {
   state.busy = on;
   $('dot').classList.toggle('busy', on);
   $('generate').disabled = on;
-  $('generate').textContent = on ? 'Generating...' : 'Generate';
+  $('generate-label').textContent = on ? 'Generating...' : 'Generate';
   $('progress-row').classList.toggle('on', on);
 }
 
 function startPolling() {
   if (state.pollTimer) return;
   setBusy(true);
+  refreshLibrary();
   state.pollTimer = setInterval(poll, 500);
   poll();
 }
@@ -500,12 +539,107 @@ async function poll() {
   clearInterval(state.pollTimer);
   state.pollTimer = null;
   setBusy(false);
-  if (snap.status === 'error') showError(snap.error || 'Generation failed', snap.suggestion);
+  state.pendingCaption = null;
+  if (snap.status === 'error') {
+    showError(snap.error || 'Generation failed', snap.suggestion);
+    await refreshLibrary();
+  }
   if (snap.status === 'done') {
     $('bar').style.width = '100%';
     await refreshLibrary();
     if (state.tracks.length) loadTrack(state.tracks[0], false);
   }
+}
+
+/* ---------- generative album art ----------
+   30 gradient + geometry presets. Each track gets a deterministic piece:
+   palette from its first genre (or a hash of its id), shape positions
+   seeded by the id, so art is stable across reloads. */
+const ART_PRESETS = [
+  ['#3B2F2A', '#8A5A44', 'circles'], ['#2A2E3B', '#5A6B8A', 'squares'],
+  ['#33283C', '#7A5A8A', 'mixed'],   ['#26332B', '#4E7A5A', 'circles'],
+  ['#3C2A2A', '#8A4444', 'squares'], ['#2A3338', '#4E7A8A', 'mixed'],
+  ['#38332A', '#8A7A44', 'circles'], ['#2E2A3C', '#6B5A9C', 'squares'],
+  ['#332A2E', '#8A5A6B', 'mixed'],   ['#2A3833', '#448A6B', 'circles'],
+  ['#3C332A', '#9C7A4E', 'squares'], ['#2A2F38', '#5A7A9C', 'circles'],
+  ['#372A38', '#8A4E8A', 'mixed'],   ['#2E3826', '#6B8A44', 'squares'],
+  ['#382A26', '#9C5A38', 'circles'], ['#26333C', '#3888A0', 'squares'],
+  ['#3C3826', '#A0913D', 'mixed'],   ['#302A3C', '#7A5AC2', 'circles'],
+  ['#3C2A33', '#C25A7A', 'squares'], ['#263C33', '#38A07A', 'mixed'],
+  ['#3C3026', '#C27A38', 'circles'], ['#262F3C', '#4466C2', 'squares'],
+  ['#3A263C', '#A044C2', 'mixed'],   ['#2C3C26', '#7AA038', 'circles'],
+  ['#3C2626', '#C24444', 'mixed'],   ['#263A3C', '#38B8C2', 'circles'],
+  ['#3C3A26', '#C2B838', 'squares'], ['#33263C', '#8A38C2', 'mixed'],
+  ['#3C2633', '#C238A0', 'circles'], ['#26283C', '#D97757', 'mixed'],
+];
+const GENRE_ART = {
+  'Lo-Fi': 0, 'Jazz': 6, 'Blues': 11, 'Folk': 3, 'Country': 10,
+  'Bossa Nova': 9, 'R&B': 8, 'Ambient': 5, 'Classical': 1, 'Cinematic': 7,
+  'Pop': 18, 'K-Pop': 28, 'EDM': 21, 'House': 25, 'Techno': 22,
+  'DnB': 19, 'Synthwave': 17, 'Chiptune': 23, 'Phonk': 12, 'Trap': 14,
+  'Drill': 24, 'Hip-Hop': 20, 'Rock': 4, 'Metal': 24, 'Punk': 16,
+  'Latin': 13, 'Reggaeton': 15, 'Afrobeat': 2,
+};
+
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function artSVG(t) {
+  const id = t.id || t.file || '?';
+  const genre = (t.genres || [])[0];
+  const preset = ART_PRESETS[
+    genre in GENRE_ART ? GENRE_ART[genre] : hashStr(id) % ART_PRESETS.length];
+  const [c1, c2, kind] = preset;
+  let seed = hashStr(id);
+  const rand = () => {
+    seed = Math.imul(seed + 0x6D2B79F5, 1);
+    let x = seed;
+    x = Math.imul(x ^ (x >>> 15), x | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+  const gid = 'g' + (hashStr(id) % 100000);
+  let shapes = '';
+  const count = 3 + Math.floor(rand() * 2);
+  for (let i = 0; i < count; i++) {
+    const cx = 10 + rand() * 76, cy = 10 + rand() * 76;
+    const size = 10 + rand() * 26;
+    const op = (0.14 + rand() * 0.22).toFixed(2);
+    const useCircle = kind === 'circles' || (kind === 'mixed' && rand() < 0.5);
+    if (useCircle) {
+      shapes += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(size / 2).toFixed(1)}" fill="#F5F4ED" opacity="${op}"/>`;
+    } else {
+      const rot = Math.floor(rand() * 90);
+      shapes += `<rect x="${(cx - size / 2).toFixed(1)}" y="${(cy - size / 2).toFixed(1)}" width="${size.toFixed(1)}" height="${size.toFixed(1)}" rx="2" fill="#F5F4ED" opacity="${op}" transform="rotate(${rot} ${cx.toFixed(1)} ${cy.toFixed(1)})"/>`;
+    }
+  }
+  // One accent shape in the gradient's brighter tone.
+  const ax = 15 + rand() * 66, ay = 15 + rand() * 66;
+  shapes += `<circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="${(5 + rand() * 8).toFixed(1)}" fill="${c2}" opacity="0.9"/>`;
+  return `<svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg">`
+    + `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1">`
+    + `<stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/>`
+    + `</linearGradient></defs>`
+    + `<rect width="96" height="96" fill="url(#${gid})"/>${shapes}</svg>`;
+}
+
+function relTime(iso) {
+  if (!iso) return '';
+  const then = new Date(iso);
+  const diff = (Date.now() - then.getTime()) / 1000;
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
+  const now = new Date();
+  if (then.toDateString() === now.toDateString()) {
+    return then.toTimeString().slice(0, 5);
+  }
+  return iso.slice(0, 10);
 }
 
 /* ---------- library ---------- */
@@ -514,27 +648,45 @@ async function refreshLibrary() {
   state.tracks = lib.tracks || [];
   const el = $('library');
   el.textContent = '';
-  if (!state.tracks.length) {
+  if (!state.tracks.length && !state.busy) {
     const d = document.createElement('div');
     d.className = 'track-meta';
     d.textContent = 'Nothing here yet. Generate your first track above.';
     el.appendChild(d);
     return;
   }
+  if (state.busy) {
+    const row = document.createElement('div');
+    row.className = 'track track-pending';
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb thumb-pending';
+    const title = document.createElement('div');
+    title.className = 'track-title';
+    title.textContent = state.pendingCaption || 'Generating your song...';
+    const meta = document.createElement('span');
+    meta.className = 'track-meta mono';
+    meta.textContent = 'generating';
+    row.append(thumb, title, meta);
+    el.appendChild(row);
+  }
   for (const t of state.tracks) {
     const row = document.createElement('div');
     row.className = 'track';
     row.dataset.id = t.id;
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    thumb.innerHTML = artSVG(t);
     const title = document.createElement('div');
     title.className = 'track-title';
     title.textContent = trackTitle(t);
     const meta = document.createElement('span');
     meta.className = 'track-meta mono';
-    meta.textContent = (t.created || '').slice(0, 10);
+    meta.textContent = relTime(t.created);
+    meta.title = t.created || '';
     const stars = document.createElement('span');
     stars.className = 'track-stars';
     stars.textContent = t.rating ? '★'.repeat(t.rating) : '';
-    row.append(title, stars, meta);
+    row.append(thumb, title, stars, meta);
     const badge = t.source === 'upload' ? 'upload'
       : t.source === 'optimized' ? (t.target || 'optimized')
       : t.task === 'cover' ? 'cover'
@@ -569,6 +721,18 @@ function loadTrack(t, autoplay) {
   state.current = t;
   $('player-card').classList.add('on');
   $('player-title').textContent = trackTitle(t);
+  $('player-art').innerHTML = artSVG(t);
+  const meta = [];
+  if (t.created) meta.push(relTime(t.created));
+  if (t.duration) meta.push(fmt(t.duration));
+  if (t.quality) meta.push(t.quality);
+  if (t.instrumental) meta.push('instrumental');
+  if (t.source) meta.push(t.source);
+  $('player-meta').textContent = meta.join(' · ');
+  const hasCaption = !!t.caption;
+  for (const b of $('quick-actions').querySelectorAll('.pill[data-mod]')) {
+    b.style.display = (b.dataset.mod === 'remix' || hasCaption) ? '' : 'none';
+  }
   $('download').href = '/api/audio/' + encodeURIComponent(t.file);
   audio.src = '/api/audio/' + encodeURIComponent(t.file);
   renderStars(t.rating || 0);
@@ -806,7 +970,9 @@ $('similar').onclick = async () => {
   const t = state.current;
   if (!t) return;
   if (isAudioSource(t)) {
-    $('similar-strength').classList.toggle('on');
+    const row = $('similar-strength');
+    row.classList.toggle('on');
+    if (row.classList.contains('on')) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     return;
   }
   $('prompt').value = t.caption || '';
@@ -851,6 +1017,48 @@ for (const b of $('similar-strength').querySelectorAll('.pill[data-s]')) {
       });
       startPolling();
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (e) { showError(e.message); }
+  };
+}
+
+/* ---------- quick actions ---------- */
+const QUICK_MODS = {
+  calmer: 'calmer, softer dynamics, gentle',
+  bass: 'heavy bass, deep low end',
+  faster: 'faster tempo, energetic, driving',
+};
+
+for (const b of $('quick-actions').querySelectorAll('.pill[data-mod]')) {
+  b.onclick = async () => {
+    const t = state.current;
+    if (!t) return;
+    let body;
+    if (b.dataset.mod === 'remix') {
+      body = { task: 'cover', src_file: t.file, cover_strength: 0.4,
+               quality: $('quality').value, similar_to: t.id };
+      if (t.caption) body.caption = t.caption;
+      state.pendingCaption = 'Remix of ' + trackTitle(t);
+    } else {
+      if (!t.caption) return;
+      body = {
+        caption: (t.caption + ', ' + QUICK_MODS[b.dataset.mod]).slice(0, 512),
+        duration: t.duration || parseInt($('duration').value, 10),
+        quality: t.quality && t.quality !== 'max' ? t.quality : $('quality').value,
+        instrumental: !!t.instrumental,
+        genres: t.genres || [],
+        similar_to: t.id,
+      };
+      if (t.bpm) body.bpm = t.bpm;
+      if (t.key) body.key = t.key;
+      state.pendingCaption = body.caption;
+    }
+    try {
+      await api('/api/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      startPolling();
     } catch (e) { showError(e.message); }
   };
 }
