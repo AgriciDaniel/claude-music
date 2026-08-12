@@ -51,6 +51,23 @@
     border: 1px solid var(--line); border-radius: 8px;
     background: var(--well);
     transition: border-color 0.15s ease;
+    position: relative;
+  }
+  .styles-pop {
+    position: absolute; left: 10px; top: calc(100% + 8px); z-index: 20;
+    width: min(560px, calc(100% - 20px));
+    max-height: 260px; overflow-y: auto;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px; box-shadow: var(--shadow);
+    opacity: 0; transform: translateY(-4px) scale(0.98);
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .styles-pop.on {
+    opacity: 1; transform: translateY(0) scale(1); pointer-events: auto;
+  }
+  .chip:active, .pill:active, .btn:active, .btn-primary:active {
+    transform: scale(0.95);
   }
   .composer:focus-within { border-color: var(--muted); }
   textarea {
@@ -108,7 +125,6 @@
     transition: border-color 0.15s ease, background 0.15s ease, transform 0.05s ease;
   }
   .btn:hover { border-color: var(--muted); background: rgba(245, 244, 237, 0.04); }
-  .btn:active { transform: translateY(1px); }
   .btn-icon {
     padding: 8px 11px; line-height: 0;
     display: inline-flex; align-items: center; justify-content: center;
@@ -123,7 +139,6 @@
     transition: filter 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
   }
   .btn-primary:hover { filter: brightness(1.08); box-shadow: 0 6px 18px rgba(217, 119, 87, 0.35); }
-  .btn-primary:active { transform: translateY(1px); }
   .btn-primary:disabled { opacity: 0.5; cursor: default; filter: none; }
   #progress-row { display: none; margin-top: 16px; }
   #progress-row.on { display: block; }
@@ -241,6 +256,15 @@
     <div class="composer">
       <textarea id="prompt" maxlength="512" placeholder="Describe the song you want to create..."></textarea>
       <div class="composer-bar">
+        <button class="chip" id="styles-chip" title="Pick one or more styles">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+          <span id="styles-chip-label">Styles</span>
+          <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="styles-pop" id="styles-pop">
+          <div class="eyebrow" style="margin-bottom:10px">Styles &middot; pick any</div>
+          <div class="pills" id="genre-pills"></div>
+        </div>
         <button class="chip" id="instrumental" title="No vocals">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V6l10-2v11"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="15" r="2.5"/></svg>
           Instrumental
@@ -271,9 +295,6 @@
       </div>
     </div>
     <div class="progress-meta mono" style="margin-top:8px"><span id="quality-hint"></span></div>
-
-    <div class="eyebrow section-label">Styles</div>
-    <div class="pills" id="genre-pills"></div>
 
     <div id="progress-row">
       <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
@@ -443,15 +464,16 @@ function showError(msg, suggestion) {
 }
 
 /* ---------- pills ---------- */
-const GENRES_COLLAPSED = 8;
+function updateStylesChip() {
+  const n = state.selected.size;
+  $('styles-chip-label').textContent = n ? 'Styles · ' + n : 'Styles';
+  $('styles-chip').classList.toggle('active', n > 0);
+}
 
 function renderGenrePills() {
   const gp = $('genre-pills');
   gp.textContent = '';
-  const visible = state.showAllGenres
-    ? state.genres
-    : state.genres.filter((g, i) => i < GENRES_COLLAPSED || state.selected.has(g.name));
-  for (const g of visible) {
+  for (const g of state.genres) {
     const b = document.createElement('button');
     b.className = 'pill' + (state.selected.has(g.name) ? ' active' : '');
     b.textContent = g.name;
@@ -462,20 +484,22 @@ function renderGenrePills() {
     };
     gp.appendChild(b);
   }
-  const hidden = state.genres.length - visible.length;
-  const more = document.createElement('button');
-  more.className = 'pill pill-more';
-  more.textContent = state.showAllGenres ? 'Show fewer' : '+ ' + hidden + ' more';
-  more.onclick = () => {
-    state.showAllGenres = !state.showAllGenres;
-    renderGenrePills();
-  };
-  if (state.showAllGenres || hidden > 0) gp.appendChild(more);
+  updateStylesChip();
 }
 
 function renderPills() {
   renderGenrePills();
 }
+
+$('styles-chip').onclick = e => {
+  e.stopPropagation();
+  $('styles-pop').classList.toggle('on');
+};
+$('styles-pop').onclick = e => e.stopPropagation();
+document.addEventListener('click', () => $('styles-pop').classList.remove('on'));
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') $('styles-pop').classList.remove('on');
+});
 
 const closest = (arr, v) => arr.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a);
 
