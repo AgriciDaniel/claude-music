@@ -28,7 +28,8 @@ jobs:
           set -e
           python -m json.tool .claude-plugin/plugin.json > /dev/null
           python -m json.tool .claude-plugin/marketplace.json > /dev/null
-          python -m json.tool skills/claude-music/config.json > /dev/null
+          python -m json.tool skills/claude-music/config.example.json > /dev/null
+          python -m json.tool skills/claude-music/webapp/genres.json > /dev/null
           echo "All JSON files valid."
 
       - name: Python compile check (no import side effects)

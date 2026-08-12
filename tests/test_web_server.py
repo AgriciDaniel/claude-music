@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import sys
 import threading
 import urllib.request
 from http.server import ThreadingHTTPServer

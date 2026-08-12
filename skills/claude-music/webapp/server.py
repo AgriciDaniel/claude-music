@@ -15,6 +15,7 @@ argument lists (never a shell).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -456,11 +457,9 @@ def parse_engine_filename(stem):
     out = {"slug": m.group("slug")}
     if m.group("seed"):
         out["seed"] = int(m.group("seed"))
-    try:
+    with contextlib.suppress(ValueError):
         out["created"] = datetime.strptime(
             m.group("date"), "%Y%m%d-%H%M").isoformat()
-    except ValueError:
-        pass
     return out
 
 
@@ -909,10 +908,8 @@ class Handler(BaseHTTPRequestHandler):
         except BrokenPipeError:
             pass
         except Exception as e:
-            try:
+            with contextlib.suppress(Exception):
                 self._json({"error": str(e)}, 500)
-            except Exception:
-                pass
 
     def _serve_audio(self, raw_name):
         path = safe_audio_path(self._output_dir(), raw_name)
@@ -1196,10 +1193,8 @@ class Handler(BaseHTTPRequestHandler):
         except BrokenPipeError:
             pass
         except Exception as e:
-            try:
+            with contextlib.suppress(Exception):
                 self._json({"error": str(e)}, 500)
-            except Exception:
-                pass
 
 
 def serve(port=8765, max_port=8775):

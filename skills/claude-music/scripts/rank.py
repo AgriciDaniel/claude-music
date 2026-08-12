@@ -26,7 +26,6 @@ import os
 import sys
 from pathlib import Path
 
-
 SCHEMA_VERSION = "0.1.0-stub"
 
 
