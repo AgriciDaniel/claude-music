@@ -252,16 +252,14 @@
       <button class="btn" id="open-folder">Open folder</button>
       <button class="btn" id="similar">Similar</button>
       <button class="btn" id="audit">Audit</button>
-      <div class="field">
-        <select id="opt-target">
-          <option value="spotify" selected>Spotify</option>
-          <option value="apple">Apple Music</option>
-          <option value="youtube">YouTube</option>
-          <option value="tiktok">TikTok</option>
-          <option value="podcast">Podcast</option>
-        </select>
-        <button class="btn" id="optimize">Optimize</button>
-      </div>
+      <button class="btn" id="optimize" title="Normalize loudness for streaming (-14 LUFS, -1 dBTP)">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="vertical-align:-2px; margin-right:6px">
+          <path d="M3 2v12M8 2v12M13 2v12"/>
+          <circle cx="3" cy="10" r="1.8" fill="var(--card)"/>
+          <circle cx="8" cy="5" r="1.8" fill="var(--card)"/>
+          <circle cx="13" cy="11" r="1.8" fill="var(--card)"/>
+        </svg><span id="optimize-label">Optimize</span>
+      </button>
       <span class="stars" id="stars"></span>
     </div>
     <div class="pills" id="similar-strength">
@@ -799,13 +797,15 @@ function seekFromEvent(e) {
   }
 }
 canvas.addEventListener('pointerdown', e => {
-  if (!audio.paused) return; // while playing the canvas is the wave show
   seeking = true;
   canvas.setPointerCapture(e.pointerId);
   seekFromEvent(e);
 });
 canvas.addEventListener('pointermove', e => { if (seeking) seekFromEvent(e); });
-canvas.addEventListener('pointerup', () => { seeking = false; });
+canvas.addEventListener('pointerup', () => {
+  if (seeking && audio.paused) playPause(true);
+  seeking = false;
+});
 
 const seekTrack = $('seek-track');
 seekTrack.addEventListener('pointerdown', e => {
@@ -813,7 +813,7 @@ seekTrack.addEventListener('pointerdown', e => {
   const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
   if (isFinite(audio.duration) && audio.duration) {
     audio.currentTime = frac * audio.duration;
-    if (audio.paused) drawFrame();
+    if (audio.paused) playPause(true);
   }
 });
 
@@ -936,22 +936,21 @@ function renderAudit(a) {
 $('optimize').onclick = async () => {
   const t = state.current;
   if (!t) return;
-  const target = $('opt-target').value;
-  const btn = $('optimize');
+  const btn = $('optimize'), label = $('optimize-label');
   btn.disabled = true;
-  btn.textContent = 'Optimizing...';
+  label.textContent = 'Optimizing...';
   try {
     const r = await api('/api/optimize', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ file: t.file, target }),
+      body: JSON.stringify({ file: t.file, target: 'spotify' }),
     });
     await refreshLibrary();
     const nt = state.tracks.find(x => x.id === r.track.id);
     if (nt) loadTrack(nt, false);
   } catch (e) { showError(e.message); }
   btn.disabled = false;
-  btn.textContent = 'Optimize';
+  label.textContent = 'Optimize';
 };
 
 /* ---------- drag and drop upload ---------- */
