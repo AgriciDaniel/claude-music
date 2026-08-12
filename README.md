@@ -276,8 +276,12 @@ The dashboard release. Full notes on the
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Generated audio inherits no licensing
-obligations from this skill; consult ACE-Step's license.
+MIT, see [LICENSE](LICENSE).
+
+This project wraps and invokes ACE-Step 1.5 (Apache 2.0) without
+redistributing it; the installer sets it up separately. Generated audio
+inherits no licensing obligations from this skill; consult ACE-Step's
+license for model output licensing.
 
 ## Credits
 
