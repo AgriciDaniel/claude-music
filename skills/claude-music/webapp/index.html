@@ -95,6 +95,19 @@
     font: inherit; font-size: 12.5px; cursor: pointer;
   }
   .chip select option { background: var(--card); }
+  .seg {
+    display: inline-flex; border: 1px solid var(--line); border-radius: 6px;
+    overflow: hidden;
+  }
+  .seg-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 12px; border: none; background: transparent;
+    color: var(--muted); font-size: 12.5px; cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+  .seg-btn:hover { color: var(--fg); }
+  .seg-btn.active { color: var(--brand); background: var(--brand-soft); }
   .section-label { margin: 18px 0 8px; }
   .pills { display: flex; flex-wrap: wrap; gap: 8px; }
   .pill {
@@ -287,8 +300,7 @@
   <div class="card">
     <h2>Generate song</h2>
     <div class="composer">
-      <textarea id="prompt" maxlength="512" placeholder="Describe the sound: genre, mood, instruments, voice. Put the words to sing in Lyrics."></textarea>
-      <textarea id="lyrics" maxlength="4096" style="display:none; border-top:1px solid var(--line); border-radius:0; min-height:110px;" placeholder="[verse]&#10;Write the words to sing, or leave empty and the AI writes them from your description.&#10;[chorus]&#10;Structure tags like [verse] and [chorus] make vocals much better."></textarea>
+      <textarea id="prompt" maxlength="4096" placeholder="Describe your song: what it is about and how it should sound. Claude writes the lyrics for you. Paste your own [verse]/[chorus] lyrics to sing them exactly."></textarea>
       <div class="composer-bar">
         <button class="chip" id="styles-chip" title="Pick one or more styles">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
@@ -299,14 +311,16 @@
           <div class="eyebrow" style="margin-bottom:10px">Styles &middot; pick any</div>
           <div class="pills" id="genre-pills"></div>
         </div>
-        <button class="chip" id="lyrics-chip" title="Write or paste the words to sing">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
-          Lyrics
-        </button>
-        <button class="chip" id="instrumental" title="No vocals">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V6l10-2v11"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="15" r="2.5"/></svg>
-          Instrumental
-        </button>
+        <div class="seg" id="mode-seg">
+          <button class="seg-btn active" data-mode="vocals" title="Sung vocals; Claude writes lyrics from your description">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 003-3V6a3 3 0 10-6 0v6a3 3 0 003 3z"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v3"/></svg>
+            Vocals
+          </button>
+          <button class="seg-btn" data-mode="instrumental" title="No vocals">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 18V6l10-2v11"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="15" r="2.5"/></svg>
+            Instrumental
+          </button>
+        </div>
         <label class="chip" title="Track length">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
           <select id="duration">
@@ -540,29 +554,36 @@ document.addEventListener('keydown', e => {
 
 const closest = (arr, v) => arr.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a);
 
-$('instrumental').onclick = () => {
-  state.instrumental = !state.instrumental;
-  $('instrumental').classList.toggle('active', state.instrumental);
-};
+function setMode(mode) {
+  state.instrumental = mode === 'instrumental';
+  for (const b of $('mode-seg').querySelectorAll('.seg-btn')) {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  }
+  $('prompt').placeholder = state.instrumental
+    ? 'Describe the sound: genre, mood, instruments.'
+    : 'Describe your song: what it is about and how it should sound. '
+      + 'Claude writes the lyrics for you. Paste your own [verse]/[chorus] '
+      + 'lyrics to sing them exactly.';
+}
+for (const b of $('mode-seg').querySelectorAll('.seg-btn')) {
+  b.onclick = () => setMode(b.dataset.mode);
+}
 
-$('lyrics-chip').onclick = () => {
-  const box = $('lyrics');
-  const show = box.style.display === 'none';
-  box.style.display = show ? '' : 'none';
-  $('lyrics-chip').classList.toggle('active', show);
-  if (show) box.focus();
-};
+const LYRIC_TAG_RE = /\[(verse|chorus|bridge|intro|outro|hook)/i;
 
 /* ---------- caption assembly ---------- */
 function buildRequest() {
   const chosen = state.genres.filter(g => state.selected.has(g.name));
+  const text = $('prompt').value.trim();
+  const textIsLyrics = !state.instrumental && LYRIC_TAG_RE.test(text);
   const seen = new Set(), parts = [];
   const push = s => String(s || '').split(',').forEach(t => {
     t = t.trim();
     if (t && !seen.has(t.toLowerCase())) { seen.add(t.toLowerCase()); parts.push(t); }
   });
-  push($('prompt').value);
+  if (!textIsLyrics) push(text);
   chosen.forEach(g => push(g.tags));
+  if (!parts.length && textIsLyrics) push('modern pop, catchy, clear vocal');
   const req = {
     caption: parts.join(', ').slice(0, 512),
     duration: parseInt($('duration').value, 10),
@@ -570,8 +591,7 @@ function buildRequest() {
     instrumental: state.instrumental,
     genres: [...state.selected],
   };
-  const lyrics = $('lyrics').value.trim();
-  if (lyrics && !state.instrumental) req.lyrics = lyrics;
+  if (textIsLyrics) req.lyrics = text;
   const first = chosen[0];
   if (first) {
     if (first.bpm) req.bpm = Math.round((first.bpm[0] + first.bpm[1]) / 2);
@@ -585,6 +605,28 @@ $('generate').onclick = async () => {
   const req = buildRequest();
   if (!req.caption) { showError('Describe your song or pick a style first.'); return; }
   state.pendingCaption = req.caption;
+  // Vocal mode without pasted lyrics: have Claude write them first.
+  if (!state.instrumental && !req.lyrics && $('prompt').value.trim()) {
+    const chosen = state.genres.filter(g => state.selected.has(g.name));
+    $('generate').disabled = true;
+    $('generate-label').textContent = 'Writing lyrics...';
+    try {
+      const r = await api('/api/lyrics', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          topic: $('prompt').value.trim(),
+          style: chosen.map(g => g.tags).join(', '),
+        }),
+      });
+      req.lyrics = r.lyrics;
+    } catch (e) {
+      // No Claude CLI or a hiccup: continue, the engine LM fills in.
+      showError(e.message);
+    }
+    $('generate').disabled = false;
+    $('generate-label').textContent = 'Generate';
+  }
   try {
     await api('/api/generate', {
       method: 'POST',
@@ -1156,8 +1198,7 @@ $('similar').onclick = async () => {
   $('prompt').value = t.caption || '';
   state.selected = new Set(t.genres || []);
   renderGenrePills();
-  state.instrumental = !!t.instrumental;
-  $('instrumental').classList.toggle('active', state.instrumental);
+  setMode(t.instrumental ? 'instrumental' : 'vocals');
   if (t.duration) $('duration').value = closest([30, 60, 120, 180, 240, 300, 480, 600], t.duration);
   if (t.quality && t.quality !== 'max') $('quality').value = t.quality;
   if (!t.caption) { showError('No saved prompt for this track. Edit and generate.'); return; }

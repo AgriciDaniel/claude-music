@@ -182,6 +182,14 @@ def test_free_vram_returns_int_or_none(server_module):
     assert v is None or isinstance(v, int)
 
 
+def test_lyrics_prompt_shape(server_module):
+    p = server_module.lyrics_prompt("my seo tool", "hip-hop, 808 bass", "es")
+    assert "my seo tool" in p and "hip-hop" in p and "language: es" in p
+    assert "[verse]" in p and "ONLY the lyrics" in p
+    p2 = server_module.lyrics_prompt("", "", "en")
+    assert "language" not in p2.lower() or "Language" not in p2
+
+
 def test_vram_block_message(server_module):
     msg = server_module.vram_block_message(
         3661, [("dictation-daemon.py", 4242), ("transcribe_server.py", 2302)])

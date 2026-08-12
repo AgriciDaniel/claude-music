@@ -309,6 +309,41 @@ def vram_block_message(free_mb, hogs):
     return msg + " Close other GPU apps, then try again."
 
 
+def lyrics_prompt(topic, style, language):
+    """Instruction for the Claude CLI to write singable lyrics."""
+    parts = [
+        "Write song lyrics to be sung by a music generation model.",
+        f"The song is about: {topic}." if topic else
+        "Pick an evocative everyday theme.",
+        f"Musical style: {style}." if style else "",
+        f"Write the lyrics in this language: {language}."
+        if language and language != "en" else "",
+        "Rules: use [verse] and [chorus] structure tags on their own lines,"
+        " 2 verses and a repeated chorus, 8 to 16 short singable lines total,"
+        " concrete imagery, a catchy hook."
+        " Output ONLY the lyrics, no title, no commentary, no code fences.",
+    ]
+    return " ".join(p for p in parts if p)
+
+
+def generate_lyrics(topic, style, language):
+    """Ask the local Claude Code CLI for lyrics. Returns (text, error)."""
+    try:
+        out = subprocess.run(
+            ["claude", "-p", lyrics_prompt(topic, style, language)],
+            capture_output=True, text=True, timeout=120)
+    except FileNotFoundError:
+        return None, ("Claude Code CLI not found. Leave lyrics empty instead:"
+                      " the high preset writes them from your description.")
+    except subprocess.TimeoutExpired:
+        return None, "Lyric writing timed out, try again."
+    text = (out.stdout or "").strip()
+    if out.returncode != 0 or not text:
+        tail = (out.stderr or "").strip()[-200:]
+        return None, f"Claude could not write lyrics: {tail or 'empty reply'}"
+    return text[:LYRICS_MAX], None
+
+
 def suggest_fix(error_msg):
     """Map common engine failures to a plain-language suggestion."""
     msg = (error_msg or "").lower()
@@ -1128,6 +1163,16 @@ class Handler(BaseHTTPRequestHandler):
                     entry.pop("title", None)  # empty title reverts to default
                 self._meta().write(entry)
                 self._json({"ok": True, "track": entry})
+            elif path == "/api/lyrics":
+                body = self._read_body() or {}
+                text, err = generate_lyrics(
+                    str(body.get("topic") or "")[:500],
+                    str(body.get("style") or "")[:300],
+                    str(body.get("language") or "en")[:5])
+                if err:
+                    self._json({"error": err}, 502)
+                else:
+                    self._json({"ok": True, "lyrics": text})
             elif path == "/api/settings":
                 body = self._read_body() or {}
                 if "output_dir" not in body:
