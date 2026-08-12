@@ -13,7 +13,7 @@ allowed-tools:
   - Read
 ---
 
-# claude-music-web — Browser Dashboard
+# claude-music-web: Browser Dashboard
 
 ## Start
 
