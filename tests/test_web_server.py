@@ -349,6 +349,30 @@ def test_build_cmd_cover_branch(server_module, tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# (g5) Output folder setting
+# ---------------------------------------------------------------------------
+
+def test_save_output_dir(server_module, tmp_path, monkeypatch):
+    monkeypatch.setattr(server_module, "CONFIG_PATH", tmp_path / "config.json")
+    assert server_module.save_output_dir("")[1] is not None
+    assert server_module.save_output_dir("relative/path")[1] is not None
+
+    target = tmp_path / "music" / "out"
+    resolved, err = server_module.save_output_dir(str(target))
+    assert err is None
+    assert resolved == target.resolve() and target.is_dir()
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    assert cfg["output_dir"] == str(target)
+
+    # Existing config keys survive an output_dir change.
+    (tmp_path / "config.json").write_text(
+        json.dumps({"ace_step_dir": "/x", "output_dir": "old"}))
+    server_module.save_output_dir(str(target))
+    cfg = json.loads((tmp_path / "config.json").read_text())
+    assert cfg["ace_step_dir"] == "/x" and cfg["output_dir"] == str(target)
+
+
+# ---------------------------------------------------------------------------
 # (h) Security guards (textual, same style as test_no_eval_in_scripts)
 # ---------------------------------------------------------------------------
 

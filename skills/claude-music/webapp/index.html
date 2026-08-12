@@ -263,8 +263,23 @@
 <div class="wrap">
   <header>
     <div class="eyebrow">Claude Music</div>
-    <div><span class="status-dot" id="dot"></span></div>
+    <div style="display:flex; align-items:center; gap:14px;">
+      <button class="edit-btn" id="settings-btn" title="Settings" style="opacity:1">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.01a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h.01a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.01a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+      <span class="status-dot" id="dot"></span>
+    </div>
   </header>
+
+  <div class="card" id="settings-card" style="display:none">
+    <div class="eyebrow" style="margin-bottom:12px">Settings</div>
+    <div class="field" style="gap:10px; flex-wrap:wrap">
+      <label for="output-dir" style="font-size:13px; color:var(--muted)">Output folder</label>
+      <input class="title-input mono" id="output-dir" style="flex:1; min-width:220px" placeholder="~/Music/claude-music-output">
+      <button class="btn" id="save-settings">Save</button>
+    </div>
+    <div class="drop-hint">Where generated songs, uploads, and optimized copies are saved. The folder is created if it does not exist; existing songs stay where they are.</div>
+  </div>
 
   <div id="setup-note">ACE-Step is not configured yet. Run <span class="mono">bash install.sh</span> in the claude-music repo, then reload this page.</div>
   <div id="error-note"></div>
@@ -1317,6 +1332,37 @@ document.addEventListener('drop', async e => {
     const t = state.tracks.find(x => x.id === r.track.id);
     if (t) loadTrack(t, false);
   } catch (err) { showError(err.message); }
+});
+
+/* ---------- settings ---------- */
+$('settings-btn').onclick = () => {
+  const card = $('settings-card');
+  const open = card.style.display !== 'none';
+  card.style.display = open ? 'none' : '';
+  if (!open) {
+    api('/api/status').then(s => { $('output-dir').value = s.output_dir || ''; });
+  }
+};
+
+$('save-settings').onclick = async () => {
+  const value = $('output-dir').value.trim();
+  if (!value) return;
+  try {
+    const r = await api('/api/settings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ output_dir: value }),
+    });
+    $('output-dir').value = r.output_dir;
+    $('settings-card').style.display = 'none';
+    showError('Output folder set to ' + r.output_dir);
+    await refreshLibrary();
+    if (state.tracks.length) loadTrack(state.tracks[0], false);
+    else $('player-card').classList.remove('on');
+  } catch (e) { showError(e.message, null, true); }
+};
+$('output-dir').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('save-settings').click();
 });
 
 /* ---------- rating ---------- */

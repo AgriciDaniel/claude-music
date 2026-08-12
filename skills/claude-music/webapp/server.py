@@ -61,6 +61,48 @@ def resolve_output_dir(cfg):
     return Path(os.path.expanduser(raw)).resolve()
 
 
+def save_output_dir(raw):
+    """Validate and persist a new output_dir in config.json.
+
+    Returns (resolved_path, None) or (None, error string). Keeps the
+    user-supplied form (e.g. with ~) in the config file.
+    """
+    raw = str(raw or "").strip()
+    if not raw:
+        return None, "Folder path is empty"
+    expanded = Path(os.path.expanduser(raw))
+    if not expanded.is_absolute():
+        return None, "Use an absolute path (or one starting with ~)"
+    try:
+        expanded.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        return None, f"Cannot create that folder: {e}"
+    if not os.access(expanded, os.W_OK):
+        return None, "That folder is not writable"
+    cfg = load_config()
+    cfg["output_dir"] = raw
+    tmp = CONFIG_PATH.with_suffix(".json.tmp")
+    try:
+        with tmp.open("w") as f:
+            json.dump(cfg, f, indent=2)
+            f.write("\n")
+        os.replace(tmp, CONFIG_PATH)
+    except Exception as e:
+        return None, f"Could not write config.json: {e}"
+    return expanded.resolve(), None
+
+
+_META_CACHE = {}
+
+
+def get_meta_store(output_dir):
+    """MetaStore per output_dir, so changing the folder takes effect live."""
+    key = str(output_dir)
+    if key not in _META_CACHE:
+        _META_CACHE[key] = MetaStore(output_dir)
+    return _META_CACHE[key]
+
+
 def is_configured(cfg):
     ace = cfg.get("ace_step_dir", "")
     return bool(ace) and ace != "CHANGE_ME" and Path(os.path.expanduser(ace)).is_dir()
@@ -754,7 +796,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "claude-music-web/0.3"
     # Set by serve():
     runner: JobRunner = None
-    meta_store: MetaStore = None
+    meta_store: MetaStore = None  # test override; normally resolved per request
 
     def log_message(self, fmt, *args):  # quiet default access log
         pass
@@ -792,6 +834,11 @@ class Handler(BaseHTTPRequestHandler):
     def _output_dir(self):
         return resolve_output_dir(load_config())
 
+    def _meta(self):
+        if self.meta_store is not None:
+            return self.meta_store
+        return get_meta_store(self._output_dir())
+
     # -- GET -------------------------------------------------------------
     def do_GET(self):
         path = urlparse(self.path).path
@@ -812,7 +859,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/progress":
                 self._json(self.runner.snapshot())
             elif path == "/api/library":
-                self._json({"tracks": self.meta_store.library()})
+                self._json({"tracks": self._meta().library()})
             elif path.startswith("/api/audio/"):
                 self._serve_audio(path[len("/api/audio/"):])
             else:
@@ -918,7 +965,7 @@ class Handler(BaseHTTPRequestHandler):
             "duration": round(float(probe["format"]["duration"]), 1),
             "rating": None,
         }
-        self.meta_store.write(entry)
+        self._meta().write(entry)
         self._json({"ok": True, "track": entry})
 
     def _track_and_path(self, body):
@@ -927,7 +974,7 @@ class Handler(BaseHTTPRequestHandler):
         path = safe_audio_path(self._output_dir(), raw)
         if path is None:
             return None, None
-        return self.meta_store.read(path.stem), path
+        return self._meta().read(path.stem), path
 
     def _handle_analyze(self):
         body = self._read_body() or {}
@@ -947,7 +994,7 @@ class Handler(BaseHTTPRequestHandler):
                           "rating": None, "orphan": True,
                           "created": datetime.now().isoformat(timespec="seconds")}
         entry["audit"] = audit
-        self.meta_store.write(entry)
+        self._meta().write(entry)
         self._json({"ok": True, "audit": audit})
 
     def _handle_optimize(self):
@@ -998,7 +1045,7 @@ class Handler(BaseHTTPRequestHandler):
             "caption": (entry or {}).get("caption"),
             "rating": None,
         }
-        self.meta_store.write(new_entry)
+        self._meta().write(new_entry)
         self._json({"ok": True, "track": new_entry})
 
     # -- POST ------------------------------------------------------------
@@ -1022,7 +1069,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._json({"error": vram_block_message(
                         free, gpu_hog_processes())}, 503)
                     return
-                start_err = self.runner.start(req, self.meta_store)
+                start_err = self.runner.start(req, self._meta())
                 if start_err == "busy":
                     self._json({"error": "A generation is already running"}, 409)
                 elif start_err == "not_configured":
@@ -1036,7 +1083,7 @@ class Handler(BaseHTTPRequestHandler):
                 if rating not in (1, 2, 3, 4, 5):
                     self._json({"error": "rating must be 1-5"}, 400)
                     return
-                entry = self.meta_store.rate(track_id, rating)
+                entry = self._meta().rate(track_id, rating)
                 if entry is None:
                     # Orphan track: create a minimal sidecar so the rating sticks.
                     path_audio = safe_audio_path(
@@ -1049,7 +1096,7 @@ class Handler(BaseHTTPRequestHandler):
                              "caption": None, "rating": rating, "orphan": True,
                              "created": info.get("created")
                              or datetime.now().isoformat(timespec="seconds")}
-                    self.meta_store.write(entry)
+                    self._meta().write(entry)
                 self._json({"ok": True, "track": entry})
             elif path == "/api/upload":
                 self._handle_upload()
@@ -1072,8 +1119,18 @@ class Handler(BaseHTTPRequestHandler):
                     entry["title"] = title
                 else:
                     entry.pop("title", None)  # empty title reverts to default
-                self.meta_store.write(entry)
+                self._meta().write(entry)
                 self._json({"ok": True, "track": entry})
+            elif path == "/api/settings":
+                body = self._read_body() or {}
+                if "output_dir" not in body:
+                    self._json({"error": "nothing to update"}, 400)
+                    return
+                resolved, err = save_output_dir(body["output_dir"])
+                if err:
+                    self._json({"error": err}, 400)
+                    return
+                self._json({"ok": True, "output_dir": str(resolved)})
             elif path == "/api/open-folder":
                 folder = str(self._output_dir())
                 opener = {"linux": "xdg-open", "darwin": "open",
@@ -1098,7 +1155,6 @@ def serve(port=8765, max_port=8775):
     out_dir = resolve_output_dir(cfg)
     out_dir.mkdir(parents=True, exist_ok=True)
     Handler.runner = JobRunner(load_config)
-    Handler.meta_store = MetaStore(out_dir)
     last_err = None
     for p in range(port, max_port + 1):
         try:
