@@ -312,6 +312,25 @@ def test_validate_cover_request(server_module):
     assert req["src_file"] == "passwd"
 
 
+def test_build_cmd_uses_equals_form_for_free_text(server_module, tmp_path):
+    """Dash-leading captions must not be parsed as flags (argparse exit 2)."""
+    runner = server_module.JobRunner(lambda: {})
+    cfg = {"ace_step_dir": str(tmp_path), "defaults": {}, "output_dir": str(tmp_path)}
+    req = {"task": "generate", "caption": "-dashy", "lyrics": "-verse one",
+           "key": "A minor", "duration": 60}
+    cmd, _, _ = runner._build_cmd(req, cfg)
+    assert "--caption=-dashy" in cmd
+    assert "--lyrics=-verse one" in cmd
+    assert "--key=A minor" in cmd
+    assert "--caption" not in cmd  # never the ambiguous separate form
+
+
+def test_engine_parses_dash_leading_caption(engine_module):
+    parser = engine_module.build_parser()
+    args = parser.parse_args(["generate", "--caption=-dashy"])
+    assert args.caption == "-dashy"
+
+
 def test_build_cmd_cover_branch(server_module, tmp_path):
     runner = server_module.JobRunner(lambda: {})
     cfg = {"ace_step_dir": str(tmp_path), "defaults": {"quality": "high"},
@@ -321,7 +340,7 @@ def test_build_cmd_cover_branch(server_module, tmp_path):
     cmd, quality, _ = runner._build_cmd(req, cfg)
     assert "cover" in cmd
     i = cmd.index("cover")
-    assert cmd[i + 1] == "--src-audio"
+    assert cmd[i + 1].startswith("--src-audio=")
     assert "--cover-strength" in cmd
     assert cmd[cmd.index("--cover-strength") + 1] == "0.7"
     assert "--caption" not in cmd    # empty caption: LM fills it in

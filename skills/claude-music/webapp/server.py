@@ -531,23 +531,25 @@ class JobRunner:
             # exploration matters less when following a source.
             if not request.get("batch"):
                 cmd += ["--batch", "1"]
-            cmd += ["cover", "--src-audio", request["src_path"],
+            # Free-text values use --flag=value: argparse exits 2 on
+            # dash-leading values in the separate-token form.
+            cmd += ["cover", "--src-audio=" + request["src_path"],
                     "--cover-strength", str(request.get("cover_strength", 0.5))]
             if request.get("caption"):
-                cmd += ["--caption", request["caption"]]
+                cmd += ["--caption=" + request["caption"]]
             if request.get("duration"):
                 cmd += ["--duration", str(float(request["duration"]))]
         else:
-            cmd += ["generate", "--caption", request["caption"],
+            cmd += ["generate", "--caption=" + request["caption"],
                     "--duration", str(float(request.get("duration") or 60))]
         if request.get("lyrics"):
-            cmd += ["--lyrics", request["lyrics"]]
+            cmd += ["--lyrics=" + request["lyrics"]]
         if request.get("instrumental"):
             cmd += ["--instrumental"]
         if request.get("bpm"):
             cmd += ["--bpm", str(int(request["bpm"]))]
         if request.get("key"):
-            cmd += ["--key", str(request["key"])]
+            cmd += ["--key=" + str(request["key"])]
         return cmd, quality, out_dir
 
     def _attempt(self, request, cfg):
