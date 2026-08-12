@@ -180,6 +180,19 @@
   }
   #quick-actions { margin-top: 12px; }
   .chev { opacity: 0.55; }
+  .edit-btn {
+    flex: none; background: none; border: none; cursor: pointer;
+    color: var(--muted); line-height: 0; padding: 4px; border-radius: 4px;
+    opacity: 0; transition: opacity 0.15s ease, color 0.15s ease;
+  }
+  .track:hover .edit-btn, .player-head:hover .edit-btn { opacity: 1; }
+  .edit-btn:hover { color: var(--fg); }
+  .title-input {
+    background: var(--well); color: var(--fg);
+    border: 1px solid var(--muted); border-radius: 4px;
+    font: inherit; padding: 2px 8px; width: 100%; min-width: 120px;
+  }
+  .title-input:focus { outline: none; border-color: var(--brand); }
   #setup-note, #error-note {
     display: none; border: 1px solid var(--brand); border-radius: 4px;
     padding: 12px 16px; font-size: 13px; color: var(--muted);
@@ -274,8 +287,11 @@
     <div class="eyebrow" id="player-eyebrow">Now playing</div>
     <div class="player-head" style="margin-top:8px">
       <div class="thumb thumb-lg" id="player-art"></div>
-      <div style="min-width:0">
-        <h2 id="player-title" style="font-size:16px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></h2>
+      <div style="min-width:0; flex:1">
+        <div style="display:flex; align-items:center; gap:6px; min-width:0">
+          <h2 id="player-title" style="font-size:16px; margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:0 1 auto;"></h2>
+          <button class="edit-btn" id="player-rename" title="Rename"></button>
+        </div>
         <div class="player-meta" id="player-meta"></div>
       </div>
     </div>
@@ -683,10 +699,15 @@ async function refreshLibrary() {
     meta.className = 'track-meta mono';
     meta.textContent = relTime(t.created);
     meta.title = t.created || '';
+    const edit = document.createElement('button');
+    edit.className = 'edit-btn';
+    edit.title = 'Rename';
+    edit.innerHTML = PENCIL_ICON;
+    edit.onclick = e => { e.stopPropagation(); editTitleInline(title, t); };
     const stars = document.createElement('span');
     stars.className = 'track-stars';
     stars.textContent = t.rating ? '★'.repeat(t.rating) : '';
-    row.append(thumb, title, stars, meta);
+    row.append(thumb, title, edit, stars, meta);
     row.onclick = () => loadTrack(t, true);
     el.appendChild(row);
   }
@@ -694,8 +715,58 @@ async function refreshLibrary() {
 }
 
 function trackTitle(t) {
+  if (t.title) return t.title;
   if (t.caption) return t.caption.length > 70 ? t.caption.slice(0, 70) + '…' : t.caption;
   return t.file || t.id;
+}
+
+const PENCIL_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 014 4L7.5 20.5 2 22l1.5-5.5z"/></svg>';
+
+async function saveTitle(t, title) {
+  const r = await api('/api/title', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ file: t.file, title }),
+  });
+  t.title = r.track.title || null;
+  const known = state.tracks.find(x => x.id === t.id);
+  if (known) known.title = t.title;
+  if (state.current && state.current.id === t.id) {
+    $('player-title').textContent = trackTitle(t);
+  }
+  refreshLibrary();
+}
+
+/* Swap a title element for an inline input; Enter or blur saves, Esc cancels. */
+function editTitleInline(el, t) {
+  const input = document.createElement('input');
+  input.className = 'title-input';
+  input.maxLength = 120;
+  input.value = t.title || trackTitle(t);
+  el.replaceChildren(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = save => {
+    if (done) return;
+    done = true;
+    const v = input.value.trim();
+    if (save && v !== (t.title || '')) {
+      saveTitle(t, v).catch(e => showError(e.message));
+    } else {
+      el.textContent = trackTitle(t);
+      if (state.current && state.current.id === t.id) {
+        $('player-title').textContent = trackTitle(t);
+      }
+    }
+  };
+  input.onkeydown = e => {
+    e.stopPropagation();
+    if (e.key === 'Enter') finish(true);
+    if (e.key === 'Escape') finish(false);
+  };
+  input.onblur = () => finish(true);
+  input.onclick = e => e.stopPropagation();
 }
 
 function highlightPlaying() {
@@ -757,6 +828,10 @@ function playPause(forcePlay) {
 const PLAY_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
 const PAUSE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7V5zm6 0h4v14h-4V5z"/></svg>';
 $('play').innerHTML = PLAY_ICON;
+$('player-rename').innerHTML = PENCIL_ICON;
+$('player-rename').onclick = () => {
+  if (state.current) editTitleInline($('player-title'), state.current);
+};
 $('play').onclick = () => playPause(false);
 $('stop').onclick = () => {
   audio.pause();

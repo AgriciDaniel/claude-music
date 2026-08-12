@@ -959,6 +959,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_analyze()
             elif path == "/api/optimize":
                 self._handle_optimize()
+            elif path == "/api/title":
+                body = self._read_body() or {}
+                title = str(body.get("title") or "").strip()[:120]
+                entry, track_path = self._track_and_path(body)
+                if track_path is None:
+                    self._json({"error": "track not found"}, 404)
+                    return
+                entry = entry or {
+                    "id": track_path.stem, "file": track_path.name,
+                    "caption": None, "rating": None, "orphan": True,
+                    "created": datetime.now().isoformat(timespec="seconds")}
+                if title:
+                    entry["title"] = title
+                else:
+                    entry.pop("title", None)  # empty title reverts to default
+                self.meta_store.write(entry)
+                self._json({"ok": True, "track": entry})
             elif path == "/api/open-folder":
                 folder = str(self._output_dir())
                 opener = {"linux": "xdg-open", "darwin": "open",

@@ -395,6 +395,19 @@ def test_live_server_smoke(server_module, tmp_path, monkeypatch):
             status, lib = get("/api/library")
             tracks = json.loads(lib)["tracks"]
             assert any(t.get("source") == "upload" for t in tracks)
+
+            # Rename the uploaded track via /api/title.
+            rn = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/title",
+                data=json.dumps({"file": body["track"]["file"],
+                                 "title": "My Renamed Song"}).encode(),
+                headers={"Content-Type": "application/json"}, method="POST")
+            with urllib.request.urlopen(rn, timeout=5) as r:
+                renamed = json.loads(r.read())
+            assert renamed["track"]["title"] == "My Renamed Song"
+            status, lib = get("/api/library")
+            assert any(t.get("title") == "My Renamed Song"
+                       for t in json.loads(lib)["tracks"])
     finally:
         httpd.shutdown()
         httpd.server_close()
