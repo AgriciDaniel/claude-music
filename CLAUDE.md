@@ -32,6 +32,8 @@ claude-music/
 - **Symlink installation** — `install.sh` creates symlinks from `~/.claude/skills/claude-music*` to this repo's `skills/` directory. Edit here, changes are live.
 - **JSON output** — All scripts output structured JSON to stdout. Progress/debug goes to stderr. Claude parses the JSON for file paths, seeds, and timing.
 - **Config-driven** — `config.json` is the single source of truth for the ACE-Step path. All scripts read from it; no hardcoded paths in code.
+- **Output naming** — `generate_music()` writes its own UUID filenames, so `rename_outputs()` runs *after* generation in each `cmd_*` and renames in place to `slug_date_index_seed.ext`. It never overwrites (appends `-2`), keeps meaningful stems like `vocals`, and logs-and-continues if a rename fails. `slugify()` is also the basename sanitizer: only `[a-z0-9-]` survives a caption. Disable with `--naming uuid`.
+- **Settings precedence** — CLI flag > `config.json` > quality preset. `build_parser()` seeds `--quality`, `--format`, `--language` and `--output-dir` from config; `resolve_quality()` applies the same chain to the preset-owned keys. Preset-owned keys (`model`, `lm_model`, `batch_size`, `thinking`) are omitted from the shipped config on purpose — setting one pins it across every preset.
 
 ## Key Files
 

@@ -105,6 +105,51 @@ The installer handles everything else (Python, FFmpeg, uv, ACE-Step).
 | `--quality high` | ~25s | Better lyrics/structure |
 | `--quality max` | ~3-5min | Highest quality possible |
 
+`standard` skips the 1.7B LM thinking pass that plans BPM, key and structure
+before diffusion, which is why it can produce thinner melodies than `high`.
+
+### Changing the default
+
+Settings resolve in this order: **CLI flag > `config.json` > quality preset.**
+To stop passing `--quality high` on every run, set it once in
+`skills/claude-music/config.json`:
+
+```json
+{
+  "defaults": {
+    "quality": "high",
+    "format": "flac"
+  }
+}
+```
+
+`quality`, `format`, `language` and the memory settings
+(`offload_to_cpu`, `offload_dit_to_cpu`, `use_flash_attention`) are read from
+there, as is the top-level `output_dir`.
+
+`model`, `lm_model`, `batch_size` and `thinking` are owned by the quality preset
+and are deliberately absent from the shipped config. Adding one pins it across
+*every* preset — e.g. a `batch_size` of 2 would silently defeat `draft`'s 4.
+
+### Output file naming
+
+ACE-Step's pipeline writes files under raw UUID names. By default those are
+renamed to something you can actually read:
+
+```
+lo-fi-afro-latin-percussion-nylon_20260812-1548_01_s3128607774.flac
+└─ caption slug ─────────────────┘ └─ date ───┘ └┘ └─ seed ────┘
+                                                index
+```
+
+The seed is embedded because it is the one field you cannot recover from the
+file afterwards, and it is what lets you regenerate or vary a track you liked
+(`--seed 3128607774`). Renaming never overwrites: a collision gets a `-2`
+suffix. Stem labels such as `vocals` from `extract` are preserved.
+
+Set `"naming": "uuid"` in the config `defaults`, or pass `--naming uuid`, to
+keep ACE-Step's original filenames.
+
 ## Commands Reference
 
 <p align="center">
