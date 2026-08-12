@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use claude-music in research, please cite both this skill and the underlying ACE-Step 1.5 model."
 title: "claude-music: AI music production skill for Claude Code"
-version: "0.3.0"
+version: "0.4.0"
 date-released: "2026-04-16"
 url: "https://github.com/AgriciDaniel/claude-music"
 repository-code: "https://github.com/AgriciDaniel/claude-music"

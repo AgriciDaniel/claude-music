@@ -8,7 +8,7 @@
     {
       "name": "claude-music",
       "description": "AI music production suite using ACE-Step 1.5 — generate, cover, repaint, compose, analyze, export, enhance, LoRA-train. Direct Python API, no REST server required.",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "source": "./"
     }
   ]

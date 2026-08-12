@@ -301,6 +301,37 @@ ruff check skills/ tests/
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and PR checklist, and [SECURITY.md](SECURITY.md) for the threat model + how to report vulnerabilities.
 
+## What's new in v0.4
+
+The dashboard grew from a generate box into a small music studio:
+
+- **Chat-style composer**: prompt on top; Styles as a multi-select dropdown
+  chip (28 genres), Instrumental, duration (30 s to 10 min), and quality
+  chips inside the field. Quality warns when free VRAM looks too low for
+  the chosen preset.
+- **Proper player**: the waveform is the track's real decoded silhouette,
+  a true timeline at all times - click or drag anywhere to seek (starts
+  playback when paused), orange played portion, icon play/pause/stop, and
+  bars that breathe with the music's spectrum.
+- **Library upgrades**: generative drifting album art (30 gradient +
+  geometry presets keyed to genre, deterministic per track), relative
+  times, click-to-rename titles, a shimmering pending row while
+  generating, and confetti when a track lands.
+- **Work with your own songs**: drag and drop to upload, then Audit
+  (loudness/true peak/format report with fix suggestions), Optimize
+  (two-pass loudnorm to -14 LUFS / -1 dBTP), Similar (cover mode with
+  Loose/Balanced/Faithful strength), and quick actions (Calmer, More
+  bass, Faster, Remix).
+- **Settings**: change the output folder from the dashboard; everything
+  follows the new folder immediately.
+- **Reliability**: fail-fast when free VRAM cannot fit a generation
+  (naming the processes holding the GPU), automatic retry with a single
+  variant on out-of-memory, automatic retry on transient launcher
+  failures, LM stdout noise no longer breaks result parsing, dash-leading
+  prompts no longer crash argument parsing, and failures surface as
+  sticky notifications with plain-language fixes.
+- Test suite: 41 -> 54 GPU-free tests.
+
 ## What's new in v0.3
 
 - **Web dashboard** (`/music web`): a minimalist local browser app with style
