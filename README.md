@@ -219,6 +219,19 @@ No cloud API. No subscription. Everything runs on your machine.
 | Turbo + Thinking | ~14GB | ~25 seconds |
 | XL (best quality) | ~16GB | ~30 seconds |
 
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `CUDA out of memory` | Other apps are holding VRAM. Close GPU-heavy programs (browsers with many tabs, other AI tools), or use `draft` quality, shorter durations, and smaller batches. `max` needs the most VRAM. The dashboard shows a warning when free VRAM is under 4 GB. |
+| No NVIDIA GPU detected | ACE-Step needs CUDA for reasonable speed. CPU-only generation works but is very slow. On AMD/Intel or macOS, check ACE-Step's own docs for ROCm/XPU/MPS scripts. |
+| `uv: command not found` | Install uv: `curl -LsSf https://astral.sh/uv/install.sh \| sh`, then re-run `install.sh`. |
+| Dashboard says "setup required" | `config.json` still has the `CHANGE_ME` placeholder. Run `bash install.sh`. |
+| Dashboard port busy | The server auto-increments 8765-8775. Or pick one: `bash music_web.sh 9000`. |
+| First generation is slow | Model checkpoints load into VRAM on first run (~10-30 s extra). Later runs are faster. |
+| Generation timed out (15 min) | Usually a first-run model download or a `max`-quality run on a slow GPU. Try again or drop to `high`. |
+| FLAC will not play in the dashboard | Chrome and Firefox play FLAC natively; some Safari versions do not. Set `"format": "mp3"` in `config.json` defaults, or use the Download button. |
+
 ## Uninstall
 
 ```bash

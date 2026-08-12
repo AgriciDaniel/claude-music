@@ -135,6 +135,10 @@
           <option value="60" selected>60 s</option>
           <option value="120">2 min</option>
           <option value="180">3 min</option>
+          <option value="240">4 min</option>
+          <option value="300">5 min</option>
+          <option value="480">8 min</option>
+          <option value="600">10 min</option>
         </select>
       </div>
       <div class="field"><label for="quality">Quality</label>
@@ -142,10 +146,12 @@
           <option value="draft">draft</option>
           <option value="standard">standard</option>
           <option value="high" selected>high</option>
+          <option value="max">max</option>
         </select>
       </div>
       <button class="btn btn-primary" id="generate">Generate</button>
     </div>
+    <div class="progress-meta mono" style="margin-top:8px"><span id="quality-hint"></span></div>
 
     <div id="progress-row">
       <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
@@ -175,6 +181,21 @@
     <div id="library"></div>
   </div>
 
+  <div class="card">
+    <div class="eyebrow">More in the terminal</div>
+    <pre class="mono" style="margin-top:10px; color:var(--muted); line-height:1.9; overflow-x:auto;">/music generate    Create music from text + lyrics
+/music cover       Remake a song in a different style
+/music repaint     Edit a section of a song
+/music compose     Songwriting help (lyrics, caption, BPM)
+/music export      Export for Spotify/YouTube/TikTok/etc
+/music analyze     Check BPM, key, loudness
+/music enhance     Normalize, denoise, separate stems
+/music random      Random generation (surprise me!)
+/music library     Browse your generated music
+/music lora        Train custom styles
+/music setup       Check if everything works</pre>
+  </div>
+
   <div class="footer">No cloud API &middot; Everything runs on your machine</div>
 </div>
 
@@ -195,10 +216,26 @@ async function api(path, opts) {
   return body;
 }
 
+const QUALITY_HINTS = {
+  draft: '~15 s, 4 variants. Quick ideas and exploring.',
+  standard: '~15 s, 2 variants. Everyday use.',
+  high: '~25 s, thinking LM. Better lyrics and structure.',
+  max: '~3-5 min, base model. Highest quality, needs the most VRAM.',
+};
+function updateQualityHint() {
+  $('quality-hint').textContent = QUALITY_HINTS[$('quality').value] || '';
+}
+$('quality').onchange = updateQualityHint;
+
 async function init() {
+  updateQualityHint();
   try {
     const status = await api('/api/status');
     if (!status.configured) $('setup-note').classList.add('on');
+    if (status.free_vram_mb !== null && status.free_vram_mb !== undefined && status.free_vram_mb < 4000) {
+      showError('Low free VRAM (' + (status.free_vram_mb / 1024).toFixed(1)
+        + ' GB). Close other GPU apps, or use draft quality and short durations.');
+    }
     if (status.busy) startPolling();
     const g = await api('/api/genres');
     state.genres = g.genres || [];
@@ -208,12 +245,22 @@ async function init() {
   } catch (e) { showError(e.message); }
 }
 
-function showError(msg) {
+function showError(msg, suggestion) {
   const n = $('error-note');
-  n.textContent = msg;
+  n.textContent = '';
+  const m = document.createElement('div');
+  m.textContent = msg;
+  n.appendChild(m);
+  if (suggestion) {
+    const s = document.createElement('div');
+    s.style.marginTop = '6px';
+    s.style.color = 'var(--fg)';
+    s.textContent = suggestion;
+    n.appendChild(s);
+  }
   n.classList.add('on');
   clearTimeout(n._t);
-  n._t = setTimeout(() => n.classList.remove('on'), 8000);
+  n._t = setTimeout(() => n.classList.remove('on'), suggestion ? 20000 : 8000);
 }
 
 /* ---------- pills ---------- */
@@ -249,7 +296,7 @@ function applyPreset(p) {
     b.classList.toggle('active', state.selected.has(b.textContent)));
   state.instrumental = !!p.instrumental;
   $('instrumental').classList.toggle('active', state.instrumental);
-  if (p.duration) $('duration').value = closest([30, 60, 120, 180], p.duration);
+  if (p.duration) $('duration').value = closest([30, 60, 120, 180, 240, 300, 480, 600], p.duration);
   if (p.quality && p.quality !== 'max') $('quality').value = p.quality;
 }
 
@@ -328,7 +375,7 @@ async function poll() {
   clearInterval(state.pollTimer);
   state.pollTimer = null;
   setBusy(false);
-  if (snap.status === 'error') showError(snap.error || 'Generation failed');
+  if (snap.status === 'error') showError(snap.error || 'Generation failed', snap.suggestion);
   if (snap.status === 'done') {
     $('bar').style.width = '100%';
     await refreshLibrary();
@@ -510,7 +557,7 @@ $('similar').onclick = async () => {
     b.classList.toggle('active', state.selected.has(b.textContent)));
   state.instrumental = !!t.instrumental;
   $('instrumental').classList.toggle('active', state.instrumental);
-  if (t.duration) $('duration').value = closest([30, 60, 120, 180], t.duration);
+  if (t.duration) $('duration').value = closest([30, 60, 120, 180, 240, 300, 480, 600], t.duration);
   if (t.quality && t.quality !== 'max') $('quality').value = t.quality;
   if (!t.caption) { showError('No saved prompt for this track. Edit and generate.'); return; }
   const req = buildRequest();

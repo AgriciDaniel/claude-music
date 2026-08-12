@@ -152,6 +152,24 @@ def test_parse_progress_line(server_module):
 
 
 # ---------------------------------------------------------------------------
+# (f2) Troubleshooting suggestions
+# ---------------------------------------------------------------------------
+
+def test_suggest_fix_maps_common_failures(server_module):
+    f = server_module.suggest_fix
+    assert "VRAM" in f("CUDA out of memory. Tried to allocate 86.00 MiB") \
+        or "GPU" in f("CUDA out of memory. Tried to allocate 86.00 MiB")
+    assert "uv" in f("uv: command not found")
+    assert "15 minutes" in f("Generation timed out")
+    assert f("some unknown failure") is None
+
+
+def test_free_vram_returns_int_or_none(server_module):
+    v = server_module.free_vram_mb()
+    assert v is None or isinstance(v, int)
+
+
+# ---------------------------------------------------------------------------
 # (g) Request validation
 # ---------------------------------------------------------------------------
 

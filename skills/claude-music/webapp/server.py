@@ -79,6 +79,38 @@ def merge_caption(user_text, tag_lists, limit=CAPTION_MAX):
     return ", ".join(parts)[:limit].rstrip(", ")
 
 
+def suggest_fix(error_msg):
+    """Map common engine failures to a plain-language suggestion."""
+    msg = (error_msg or "").lower()
+    if "out of memory" in msg or "cuda oom" in msg:
+        return ("The GPU ran out of memory. Close other GPU-heavy apps, "
+                "or try draft quality, a shorter duration, or a smaller batch. "
+                "The max preset needs the most VRAM.")
+    if "uv" in msg and ("not found" in msg or "no such file" in msg):
+        return ("The uv package manager is missing. Install it with: "
+                "curl -LsSf https://astral.sh/uv/install.sh | sh")
+    if "change_me" in msg or "ace-step" in msg and "not" in msg:
+        return "ACE-Step is not configured. Run install.sh from the repo."
+    if "timed out" in msg:
+        return ("Generation took longer than 15 minutes. Try a lower quality "
+                "preset or shorter duration; first runs also download models.")
+    if "no space left" in msg:
+        return "The disk holding the output folder is full."
+    return None
+
+
+def free_vram_mb():
+    """Free VRAM in MB via nvidia-smi, or None when unavailable."""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.free",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=5)
+        return int(out.stdout.strip().splitlines()[0])
+    except Exception:
+        return None
+
+
 def parse_progress_line(line):
     """One stderr line -> event dict or None (model logs are not JSON)."""
     line = line.strip()
@@ -238,7 +270,7 @@ class JobRunner:
         self._state_lock = threading.Lock()
         self.state = {"status": "idle", "pct": None, "stage": None,
                       "started_at": None, "result": None, "error": None,
-                      "request": None}
+                      "suggestion": None, "request": None}
         self.last_generation_sec = 30.0
 
     def snapshot(self):
@@ -264,7 +296,7 @@ class JobRunner:
             return "busy"
         self._set(status="loading", pct=None, stage="loading_model",
                   started_at=time.time(), result=None, error=None,
-                  request=request)
+                  suggestion=None, request=request)
         threading.Thread(target=self._run, args=(request, cfg, meta_store),
                          daemon=True).start()
         return None
@@ -329,7 +361,8 @@ class JobRunner:
             except subprocess.TimeoutExpired:
                 proc.kill()
                 proc.communicate()
-                self._set(status="error", error="Generation timed out")
+                self._set(status="error", error="Generation timed out",
+                          suggestion=suggest_fix("timed out"))
                 return
             t_err.join(timeout=5)
 
@@ -337,12 +370,14 @@ class JobRunner:
                 result = json.loads(stdout)
             except ValueError:
                 tail = (stdout or "").strip()[-300:]
-                self._set(status="error",
-                          error=f"Engine produced no JSON (exit {proc.returncode}): {tail}")
+                err = f"Engine produced no JSON (exit {proc.returncode}): {tail}"
+                self._set(status="error", error=err,
+                          suggestion=suggest_fix(err))
                 return
             if not result.get("success"):
-                self._set(status="error",
-                          error=result.get("error") or "Generation failed")
+                err = result.get("error") or "Generation failed"
+                self._set(status="error", error=err,
+                          suggestion=result.get("suggestion") or suggest_fix(err))
                 return
 
             gen_sec = (result.get("timing") or {}).get("generation_sec")
@@ -374,7 +409,8 @@ class JobRunner:
                 meta_store.write(entry)
             self._set(status="done", pct=1.0, result=result)
         except Exception as e:
-            self._set(status="error", error=str(e))
+            self._set(status="error", error=str(e),
+                      suggestion=suggest_fix(str(e)))
         finally:
             self.lock.release()
 
@@ -493,6 +529,7 @@ class Handler(BaseHTTPRequestHandler):
                     "configured": is_configured(cfg),
                     "busy": snap["status"] in ("loading", "generating"),
                     "output_dir": str(resolve_output_dir(cfg)),
+                    "free_vram_mb": free_vram_mb(),
                 })
             elif path == "/api/genres":
                 self._file(WEBAPP_DIR / "genres.json", "application/json")
