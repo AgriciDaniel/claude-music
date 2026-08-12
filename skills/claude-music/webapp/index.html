@@ -316,7 +316,7 @@
   <div class="card">
     <h2>Generate song</h2>
     <div class="composer">
-      <textarea id="prompt" maxlength="4096" placeholder="Describe your song: what it is about and how it should sound. Claude writes the lyrics for you. Paste your own [verse]/[chorus] lyrics to sing them exactly."></textarea>
+      <textarea id="prompt" maxlength="4096" placeholder=""></textarea>
       <div class="composer-bar">
         <button class="chip" id="styles-chip" title="Pick one or more styles">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
@@ -572,20 +572,62 @@ document.addEventListener('keydown', e => {
 
 const closest = (arr, v) => arr.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a);
 
+/* Typewriter placeholder: short examples typed one after another. */
+const EXAMPLES = {
+  vocals: [
+    'a summer song about my dog',
+    'sad piano ballad about leaving home',
+    'energetic gym rap, heavy 808s',
+    'spanish reggaeton about friday night',
+    'a jazz song about my coffee machine',
+  ],
+  instrumental: [
+    'chill lo-fi for studying',
+    'epic orchestral trailer music',
+    'smooth jazz for a rainy evening',
+    'synthwave for a night drive',
+  ],
+};
+const REDUCED_MOTION = window.matchMedia
+  && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+let twToken = 0;
+
+async function typewriter() {
+  const token = ++twToken;
+  const pool = EXAMPLES[state.instrumental ? 'instrumental' : 'vocals'];
+  if (REDUCED_MOTION) {
+    $('prompt').placeholder = 'Describe your song, e.g. "' + pool[0] + '"';
+    return;
+  }
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let i = 0;
+  while (token === twToken) {
+    const text = pool[i % pool.length];
+    for (let n = 1; n <= text.length && token === twToken; n++) {
+      $('prompt').placeholder = text.slice(0, n);
+      await sleep(38);
+    }
+    await sleep(1800);
+    for (let n = text.length; n >= 0 && token === twToken; n--) {
+      $('prompt').placeholder = text.slice(0, n);
+      await sleep(14);
+    }
+    await sleep(350);
+    i++;
+  }
+}
+
 function setMode(mode) {
   state.instrumental = mode === 'instrumental';
   for (const b of $('mode-seg').querySelectorAll('.seg-btn')) {
     b.classList.toggle('active', b.dataset.mode === mode);
   }
-  $('prompt').placeholder = state.instrumental
-    ? 'Describe the sound: genre, mood, instruments.'
-    : 'Describe your song: what it is about and how it should sound. '
-      + 'Claude writes the lyrics for you. Paste your own [verse]/[chorus] '
-      + 'lyrics to sing them exactly.';
+  typewriter();
 }
 for (const b of $('mode-seg').querySelectorAll('.seg-btn')) {
   b.onclick = () => setMode(b.dataset.mode);
 }
+typewriter();
 
 const LYRIC_TAG_RE = /\[(verse|chorus|bridge|intro|outro|hook)/i;
 
