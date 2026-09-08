@@ -146,7 +146,7 @@ def load_config():
     if not config_path.exists():
         return {}
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8-sig") as f:
             cfg = json.load(f)
     except Exception as e:
         log(f"Warning: could not read config.json ({e}), using built-in defaults")

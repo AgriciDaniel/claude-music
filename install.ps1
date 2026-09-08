@@ -1,4 +1,4 @@
-# claude-music — Windows Installer (PowerShell)
+﻿# claude-music — Windows Installer (PowerShell)
 # Port of install.sh for Windows users. Requires PowerShell 5.1+ and Developer Mode
 # (or Administrator) for symlink creation.
 #
@@ -77,6 +77,8 @@ if (Test-Command uv) { Write-Ok "uv found" }
 else {
     Write-Warn "uv not found. Installing..."
     Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression
+    # Refresh PATH so the freshly installed uv is visible to this process
+    $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User") + ";$env:USERPROFILE\.local\bin"
     if (Test-Command uv) { Write-Ok "uv installed" }
     else { Write-Err "uv install failed. Install manually: https://docs.astral.sh/uv/getting-started/installation/"; exit 1 }
 }
@@ -135,7 +137,9 @@ if (-not (Test-Path $CONFIG)) {
 $cfgJson = Get-Content $CONFIG -Raw | ConvertFrom-Json
 $cfgJson.ace_step_dir    = $aceDir
 $cfgJson.checkpoint_dir  = (Join-Path $aceDir "checkpoints")
-$cfgJson | ConvertTo-Json -Depth 10 | Set-Content $CONFIG -Encoding utf8
+# Windows PowerShell 5.1's "-Encoding utf8" writes a BOM, which Python's
+# json.load() rejects — write UTF-8 without a BOM so every reader agrees.
+[System.IO.File]::WriteAllText($CONFIG, ($cfgJson | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
 Write-Ok "config.json updated"
 
 # ----------------------------------------------------------------------

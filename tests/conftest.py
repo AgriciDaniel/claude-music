@@ -29,7 +29,7 @@ def config_json() -> dict:
     """Parsed config: the per-machine config.json when present (dev machines),
     else the tracked config.example.json (CI, fresh clones)."""
     path = CONFIG_PATH if CONFIG_PATH.exists() else CONFIG_EXAMPLE_PATH
-    with path.open() as f:
+    with path.open(encoding="utf-8-sig") as f:
         return json.load(f)
 
 
