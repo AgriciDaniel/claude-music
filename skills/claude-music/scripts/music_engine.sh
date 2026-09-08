@@ -10,7 +10,7 @@ CONFIG="$SCRIPT_DIR/../config.json"
 
 # Read ACE-Step path from config.json
 if [ -f "$CONFIG" ] && command -v python3 &>/dev/null; then
-    ACE_STEP_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG'))['ace_step_dir'])" 2>/dev/null)
+    ACE_STEP_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG', encoding='utf-8-sig'))['ace_step_dir'])" 2>/dev/null)
 fi
 ACE_STEP_DIR="${ACE_STEP_DIR:-}"
 

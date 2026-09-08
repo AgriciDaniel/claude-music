@@ -17,6 +17,7 @@ import argparse
 import ast
 import io
 import json
+import re
 import subprocess
 import uuid
 from contextlib import redirect_stdout
@@ -197,7 +198,14 @@ def test_config_json_placeholder_or_absolute(config_json):
     Anything else suggests an accidentally-committed user path (VULN-002
     regression guard)."""
     ace_dir = config_json["ace_step_dir"]
-    assert ace_dir == "CHANGE_ME" or ace_dir.startswith("/") or ace_dir.startswith("~"), (
+    # Absolute means POSIX ("/opt/..."), home-relative ("~/...") or Windows
+    # ("C:\Users\..."), which install.ps1 writes — Path.is_absolute() only
+    # recognises the host platform's form, so match the drive letter directly.
+    is_absolute = (
+        ace_dir.startswith(("/", "~"))
+        or re.match(r"^[A-Za-z]:[\\/]", ace_dir) is not None
+    )
+    assert ace_dir == "CHANGE_ME" or is_absolute, (
         f"ace_step_dir should be 'CHANGE_ME' pre-install or an absolute path, "
         f"got: {ace_dir!r}. If a user's personal path leaked, run the installer "
         f"or reset to 'CHANGE_ME' before committing."
