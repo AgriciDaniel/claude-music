@@ -8,13 +8,20 @@ PLATFORM="${1:-}"
 INPUT="${2:-}"
 OUTPUT="${3:-}"
 
+# JSON is emitted via json.dumps so a path containing quotes cannot break
+# (or forge) the JSON that callers parse. python3 is required by the rest
+# of the skill anyway.
+json_error() {  # json_error <error> [suggestion]
+    python3 -c 'import json,sys; d={"success": False, "error": sys.argv[1]}; len(sys.argv) > 2 and sys.argv[2] and d.update(suggestion=sys.argv[2]); print(json.dumps(d))' "$@"
+}
+
 if [ -z "$PLATFORM" ] || [ -z "$INPUT" ]; then
     echo '{"success":false,"error":"Usage: music_export.sh <platform> <input> [output]"}'
     exit 1
 fi
 
 if [ ! -f "$INPUT" ]; then
-    echo '{"success":false,"error":"Input file not found: '"$INPUT"'"}'
+    json_error "Input file not found: $INPUT"
     exit 1
 fi
 
@@ -32,7 +39,7 @@ DIR=$(dirname "$INPUT")
 # Safety: don't overwrite existing files
 check_output() {
     if [ -f "$1" ]; then
-        echo '{"success":false,"error":"Output already exists: '"$1"'","suggestion":"Delete it first or specify a different --output path"}'
+        json_error "Output already exists: $1" "Delete it first or specify a different --output path"
         exit 1
     fi
 }
@@ -79,15 +86,22 @@ case "$PLATFORM" in
         ffmpeg -n -i "$INPUT" -c:a libmp3lame -b:a 320k "$OUT" 2>/dev/null
         ;;
     *)
-        echo '{"success":false,"error":"Unknown platform: '"$PLATFORM"'. Use: spotify, youtube, tiktok, podcast, cd, archive, web, mp3"}'
+        json_error "Unknown platform: $PLATFORM. Use: spotify, youtube, tiktok, podcast, cd, archive, web, mp3"
         exit 1
         ;;
 esac
 
 if [ -f "$OUT" ]; then
     SIZE=$(stat --format=%s "$OUT" 2>/dev/null || stat -f%z "$OUT" 2>/dev/null)
-    SIZE_MB=$(echo "scale=2; $SIZE / 1048576" | bc 2>/dev/null || echo "unknown")
-    echo "{\"success\":true,\"platform\":\"$PLATFORM\",\"output\":\"$OUT\",\"size_mb\":$SIZE_MB}"
+    python3 -c '
+import json, sys
+platform, out, size = sys.argv[1:4]
+try:
+    size_mb = round(int(size) / 1048576, 2)
+except ValueError:
+    size_mb = None
+print(json.dumps({"success": True, "platform": platform, "output": out,
+                  "size_mb": size_mb}))' "$PLATFORM" "$OUT" "${SIZE:-}"
 else
     echo '{"success":false,"error":"Export failed — output not created"}'
     exit 1

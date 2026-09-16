@@ -393,6 +393,39 @@ def test_server_binds_loopback_only(server_source):
     assert '"0.0.0.0"' not in server_source
 
 
+def test_host_allowed_blocks_dns_rebinding(server_module):
+    f = server_module.host_allowed
+    assert f("127.0.0.1:8765")
+    assert f("127.0.0.1")
+    assert f("localhost:8765")
+    assert f("LOCALHOST:8765")
+    assert f("[::1]:8765")
+    assert not f("attacker.example:8765")
+    assert not f("attacker.example")
+    assert not f("127.0.0.1.attacker.example:8765")
+    assert not f("")
+    assert not f(None)
+
+
+def test_origin_allowed_blocks_cross_site(server_module):
+    f = server_module.origin_allowed
+    assert f(None)                          # curl / same-machine tools
+    assert f("")
+    assert f("http://127.0.0.1:8765")
+    assert f("http://localhost:8770")
+    assert not f("https://attacker.example")
+    assert not f("http://localhost.attacker.example")
+    assert not f("null")                    # sandboxed iframe / file://
+    assert not f("garbage")
+
+
+def test_lyrics_cli_runs_with_tools_disabled(server_module):
+    """The claude -p lyrics call must never inherit agentic tools."""
+    tools = server_module.CLAUDE_LYRICS_DISALLOWED_TOOLS.split(",")
+    for name in ("Bash", "Edit", "Write", "Read", "WebFetch", "Task"):
+        assert name in tools
+
+
 def test_engine_has_progress_flag(engine_module):
     parser = engine_module.build_parser()
     args = parser.parse_args(["--progress", "generate", "-c", "x"])
@@ -443,6 +476,36 @@ def test_live_server_smoke(server_module, tmp_path, monkeypatch):
         with pytest.raises(urllib.error.HTTPError) as exc:
             urllib.request.urlopen(req, timeout=5)
         assert exc.value.code == 503
+
+        # DNS rebinding: a request whose Host is not loopback is refused.
+        reb = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/library",
+            headers={"Host": "attacker.example"})
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(reb, timeout=5)
+        assert exc.value.code == 403
+
+        # CSRF: a POST carrying a foreign Origin is refused, even the
+        # "simple request" form that browsers send without a preflight.
+        csrf = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/lyrics",
+            data=json.dumps({"topic": "evil"}).encode(),
+            headers={"Content-Type": "text/plain",
+                     "Origin": "https://attacker.example"}, method="POST")
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(csrf, timeout=5)
+        assert exc.value.code == 403
+
+        # Same-origin POSTs (the dashboard itself) pass the guard: this one
+        # reaches validation and fails there, not at the origin check.
+        ok_origin = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/rate",
+            data=json.dumps({"id": "x", "rating": 99}).encode(),
+            headers={"Content-Type": "application/json",
+                     "Origin": f"http://127.0.0.1:{port}"}, method="POST")
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            urllib.request.urlopen(ok_origin, timeout=5)
+        assert exc.value.code == 400
 
         # Upload a real (tiny) WAV; requires ffprobe for validation.
         import shutil

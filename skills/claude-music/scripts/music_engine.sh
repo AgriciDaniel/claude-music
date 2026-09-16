@@ -8,21 +8,34 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$SCRIPT_DIR/music_engine.py"
 CONFIG="$SCRIPT_DIR/../config.json"
 
-# Read ACE-Step path from config.json
+# Emit an error JSON without splicing values into the string by hand:
+# json.dumps escapes them, so a path with quotes cannot break (or forge)
+# the JSON that callers parse. Falls back to a static message if python3
+# is missing (in which case the engine cannot run anyway).
+json_error() {  # json_error <error> <suggestion>
+    if command -v python3 &>/dev/null; then
+        python3 -c 'import json,sys; print(json.dumps({"success": False, "error": sys.argv[1], "suggestion": sys.argv[2]}))' "$1" "$2"
+    else
+        echo '{"success":false,"error":"python3 not found","suggestion":"Install Python 3 first"}'
+    fi
+}
+
+# Read ACE-Step path from config.json (path passed via argv, never
+# interpolated into the -c program text).
 if [ -f "$CONFIG" ] && command -v python3 &>/dev/null; then
-    ACE_STEP_DIR=$(python3 -c "import json; print(json.load(open('$CONFIG'))['ace_step_dir'])" 2>/dev/null)
+    ACE_STEP_DIR=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("ace_step_dir") or "")' "$CONFIG" 2>/dev/null)
 fi
 ACE_STEP_DIR="${ACE_STEP_DIR:-}"
 
 # Pre-flight: check ACE-Step exists
 if [ ! -d "$ACE_STEP_DIR" ]; then
-    echo '{"success":false,"error":"ACE-Step not found at '"$ACE_STEP_DIR"'","suggestion":"Install ACE-Step 1.5 or update config.json"}'
+    json_error "ACE-Step not found at ${ACE_STEP_DIR:-<unset>}" "Install ACE-Step 1.5 or update config.json"
     exit 1
 fi
 
 # Pre-flight: check uv exists
 if ! command -v uv &>/dev/null; then
-    echo '{"success":false,"error":"uv not found","suggestion":"Install with: curl -LsSf https://astral.sh/uv/install.sh | sh"}'
+    json_error "uv not found" "Install with: curl -LsSf https://astral.sh/uv/install.sh | sh"
     exit 1
 fi
 
@@ -30,7 +43,7 @@ fi
 if command -v nvidia-smi &>/dev/null; then
     FREE_VRAM=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits 2>/dev/null | head -1 | xargs)
     if [ -n "$FREE_VRAM" ] && [ "$FREE_VRAM" -lt 4000 ]; then
-        echo '{"success":false,"error":"Insufficient VRAM: '"$FREE_VRAM"'MB free (minimum 4GB needed)","suggestion":"Close other GPU applications or use --quality draft"}' >&2
+        json_error "Insufficient VRAM: ${FREE_VRAM}MB free (minimum 4GB needed)" "Close other GPU applications or use --quality draft" >&2
     fi
 fi
 

@@ -10,7 +10,9 @@ lossy output filenames.
 
 Security posture: binds 127.0.0.1 only, one generation at a time, all file
 serving is restricted to the configured output_dir, subprocesses always use
-argument lists (never a shell).
+argument lists (never a shell). Every request must carry a loopback Host
+header (blocks DNS rebinding) and POSTs must not carry a foreign Origin
+(blocks CSRF from web pages open in the same browser).
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from collections import deque
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -45,6 +48,44 @@ FILENAME_RE = re.compile(
     r"^(?P<slug>.+)_(?P<date>\d{8}-\d{4})_(?P<index>\d{2})"
     r"(?P<stem>(?:_[a-z0-9-]+)*?)(?:_s(?P<seed>\d+))?(?:-\d+)?$"
 )
+
+
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def host_allowed(host_header):
+    """True when the Host header names this loopback server.
+
+    Blocks DNS rebinding: a page on attacker.example that rebinds its
+    hostname to 127.0.0.1 reaches the socket, but its requests still carry
+    Host: attacker.example and are refused here.
+    """
+    host = (host_header or "").strip().lower()
+    if not host:
+        return False
+    if host.startswith("["):  # [::1]:port
+        host = host[1:].split("]", 1)[0]
+    elif host.count(":") == 1:  # host:port
+        host = host.rsplit(":", 1)[0]
+    return host in LOOPBACK_HOSTS
+
+
+def origin_allowed(origin_header):
+    """True when Origin is absent (curl, same-machine tools) or loopback.
+
+    Blocks CSRF: browsers attach the page's Origin to every cross-site
+    POST, including "simple" text/plain fetches and form posts that skip
+    the CORS preflight. An explicit "null" Origin (sandboxed iframe,
+    file:// page) is refused too.
+    """
+    origin = (origin_header or "").strip()
+    if not origin:
+        return True
+    try:
+        host = (urlparse(origin).hostname or "").lower()
+    except ValueError:
+        return False
+    return host in LOOPBACK_HOSTS
 
 
 def load_config():
@@ -327,11 +368,22 @@ def lyrics_prompt(topic, style, language):
     return " ".join(p for p in parts if p)
 
 
+# Lyric writing is pure text generation, so the CLI runs with every
+# agentic tool disabled: a hostile topic/style string has nothing to
+# escalate into, regardless of the user's own tool allowlists.
+CLAUDE_LYRICS_DISALLOWED_TOOLS = (
+    "Bash,Edit,Write,MultiEdit,NotebookEdit,Read,Glob,Grep,"
+    "WebFetch,WebSearch,Task,TodoWrite"
+)
+
+
 def generate_lyrics(topic, style, language):
     """Ask the local Claude Code CLI for lyrics. Returns (text, error)."""
     try:
         out = subprocess.run(
-            ["claude", "-p", lyrics_prompt(topic, style, language)],
+            ["claude", "-p",
+             "--disallowedTools", CLAUDE_LYRICS_DISALLOWED_TOOLS,
+             lyrics_prompt(topic, style, language)],
             capture_output=True, text=True, timeout=120)
     except FileNotFoundError:
         return None, ("Claude Code CLI not found. Leave lyrics empty instead:"
@@ -860,6 +912,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _reject_cross_origin(self, check_origin):
+        """Refuse rebound/cross-site requests. True when the request was
+        rejected (a 403 has been sent)."""
+        if not host_allowed(self.headers.get("Host")):
+            self._json({"error": "forbidden host"}, 403)
+            return True
+        if check_origin and not origin_allowed(self.headers.get("Origin")):
+            self._json({"error": "cross-origin request rejected"}, 403)
+            return True
+        return False
+
     def _read_body(self):
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -882,6 +945,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- GET -------------------------------------------------------------
     def do_GET(self):
+        if self._reject_cross_origin(check_origin=False):
+            return
         path = urlparse(self.path).path
         try:
             if path in ("/", "/index.html"):
@@ -907,9 +972,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "not found"}, 404)
         except BrokenPipeError:
             pass
-        except Exception as e:
+        except Exception:
+            # Log the detail server-side; the client gets a generic message
+            # so internal paths never leak into responses.
+            traceback.print_exc(file=sys.stderr)
             with contextlib.suppress(Exception):
-                self._json({"error": str(e)}, 500)
+                self._json({"error": "internal server error"}, 500)
 
     def _serve_audio(self, raw_name):
         path = safe_audio_path(self._output_dir(), raw_name)
@@ -1089,6 +1157,8 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- POST ------------------------------------------------------------
     def do_POST(self):
+        if self._reject_cross_origin(check_origin=True):
+            return
         path = urlparse(self.path).path
         try:
             if path == "/api/generate":
@@ -1192,9 +1262,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "not found"}, 404)
         except BrokenPipeError:
             pass
-        except Exception as e:
+        except Exception:
+            # Log the detail server-side; the client gets a generic message
+            # so internal paths never leak into responses.
+            traceback.print_exc(file=sys.stderr)
             with contextlib.suppress(Exception):
-                self._json({"error": str(e)}, 500)
+                self._json({"error": "internal server error"}, 500)
 
 
 def serve(port=8765, max_port=8775):

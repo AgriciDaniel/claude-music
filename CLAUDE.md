@@ -96,3 +96,6 @@ bash skills/claude-music/scripts/music_engine.sh --quality draft generate \
 - Basename sanitization on user-provided filenames
 - Caption capped at 512 chars, lyrics at 4096 chars (ACE-Step limits)
 - `.claude/` directory gitignored (user-specific settings)
+- Web dashboard rejects non-loopback `Host` headers (DNS rebinding) and POSTs with a foreign `Origin` (CSRF) — see `host_allowed()`/`origin_allowed()` in `server.py`
+- The `/api/lyrics` `claude -p` call runs with all agentic tools disabled (`--disallowedTools`), so a hostile topic string cannot escalate
+- Shell scripts never splice paths into JSON or `python3 -c` program text — values pass through `argv` and `json.dumps`
