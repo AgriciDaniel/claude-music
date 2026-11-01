@@ -27,6 +27,9 @@ DIR=$(dirname "$INPUT")
 #   -16 LUFS / -1 dBTP  → Podcast (AES TD1004, generally quieter dialogue-safe)
 #   LRA=11              → loudness-range target; wide enough for dynamic music,
 #                         tight enough to prevent deep attenuation on chart streamers.
+#   TP=-1.5 on lossy    → MP3/AAC encoding overshoots true peak by ~0.3 dB
+#                         (a -1.0 dBTP master measured -0.7 dBTP as 256k AAC);
+#                         lossless FLAC keeps TP=-1.
 # Full references live in skills/claude-music/references/post-processing.md
 
 # Safety: don't overwrite existing files
@@ -46,17 +49,17 @@ case "$PLATFORM" in
     youtube)
         OUT="${OUTPUT:-${DIR}/${BASENAME}_youtube.mp3}"
         check_output "$OUT"
-        ffmpeg -n -i "$INPUT" -af "loudnorm=I=-14:TP=-1:LRA=11" -c:a libmp3lame -b:a 320k -ar 48000 "$OUT" 2>/dev/null
+        ffmpeg -n -i "$INPUT" -af "loudnorm=I=-14:TP=-1.5:LRA=11" -c:a libmp3lame -b:a 320k -ar 48000 "$OUT" 2>/dev/null
         ;;
     tiktok|reels|instagram)
         OUT="${OUTPUT:-${DIR}/${BASENAME}_tiktok.m4a}"
         check_output "$OUT"
-        ffmpeg -n -i "$INPUT" -af "loudnorm=I=-14:TP=-1:LRA=11" -c:a aac -b:a 256k -ar 44100 "$OUT" 2>/dev/null
+        ffmpeg -n -i "$INPUT" -af "loudnorm=I=-14:TP=-1.5:LRA=11" -c:a aac -b:a 256k -ar 44100 "$OUT" 2>/dev/null
         ;;
     podcast)
         OUT="${OUTPUT:-${DIR}/${BASENAME}_podcast.mp3}"
         check_output "$OUT"
-        ffmpeg -n -i "$INPUT" -af "loudnorm=I=-16:TP=-1:LRA=11" -c:a libmp3lame -b:a 192k -ar 44100 -ac 1 "$OUT" 2>/dev/null
+        ffmpeg -n -i "$INPUT" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -c:a libmp3lame -b:a 192k -ar 44100 -ac 1 "$OUT" 2>/dev/null
         ;;
     cd)
         OUT="${OUTPUT:-${DIR}/${BASENAME}_cd.wav}"
